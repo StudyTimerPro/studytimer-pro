@@ -1,6 +1,6 @@
 import { db } from "./config";
 import {
-  ref, set, get, push, update, remove, onValue, off
+  ref, set, get, push, update, remove, onValue, off, runTransaction,
 } from "firebase/database";
 
 // ── Plans ──────────────────────────────────
@@ -78,4 +78,18 @@ export function saveUserSettings(uid, settings) {
 
 export function getUserSettings(uid) {
   return get(ref(db, `users/${uid}/settings`)).then(snap => snap.val());
+}
+
+// ── AI Tokens ──────────────────────────────
+/** Returns remaining token count; defaults to 10 for new users. */
+export function getUserTokens(uid) {
+  return get(ref(db, `users/${uid}/aiTokens`))
+    .then(snap => (snap.val() === null ? 10 : snap.val()));
+}
+
+/** Atomically decrement token count (floor 0). */
+export function decrementUserTokens(uid) {
+  return runTransaction(ref(db, `users/${uid}/aiTokens`), current =>
+    Math.max(0, (current === null ? 10 : current) - 1)
+  );
 }

@@ -3,6 +3,7 @@ import useStore from "../store/useStore";
 import { useAuth } from "../hooks/useAuth";
 import { useTimer } from "../hooks/useTimer";
 import { listenPlans, savePlan, updatePlan, deletePlan } from "../firebase/db";
+import AIPlanModal from "../components/plan/AIPlanModal";
 
 export default function TodaysPlan() {
   const { user } = useAuth();
@@ -11,6 +12,7 @@ export default function TodaysPlan() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId]  = useState(null);
   const [form, setForm] = useState(defaultForm());
+  const [showAI, setShowAI] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -52,7 +54,10 @@ export default function TodaysPlan() {
           <Chip label="Sessions" value={sessions.length} />
           <Chip label="Total"    value={minsToHM(totalMins)} />
         </div>
-        <button onClick={openAdd} style={btnStyle("var(--accent)")}>＋ Add Session</button>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={() => setShowAI(true)} style={btnStyle("#7c3aed")}>✨ AI Plan</button>
+          <button onClick={openAdd} style={btnStyle("var(--accent)")}>＋ Add Session</button>
+        </div>
       </div>
 
       <div style={{ background: "var(--surface)", borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)", boxShadow: "var(--shadow)" }}>
@@ -101,6 +106,17 @@ export default function TodaysPlan() {
           </table>
         </div>
       </div>
+
+      {showAI && user && (
+        <AIPlanModal
+          user={user}
+          onClose={() => setShowAI(false)}
+          onCreated={n => {
+            showToast(`Plan created! ${n} session${n !== 1 ? "s" : ""} added`);
+            setShowAI(false);
+          }}
+        />
+      )}
 
       {modalOpen && (
         <div onClick={e => e.target === e.currentTarget && setModalOpen(false)}
