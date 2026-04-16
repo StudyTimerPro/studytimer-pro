@@ -1,6 +1,7 @@
 import React from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
+import BurgerMenu from "./BurgerMenu";
 
 const tabs = [
   { id: "/",            label: "📅 Today's Plan" },
@@ -26,9 +27,12 @@ export default function Navbar() {
         alignItems: "center",
         justifyContent: "space-between"
       }}>
-        <h1 style={{ fontFamily: "monospace", fontSize: 18, letterSpacing: -0.5 }}>
-          📚 StudyTimer Pro
-        </h1>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <BurgerMenu user={user} />
+          <h1 style={{ fontFamily: "monospace", fontSize: 18, letterSpacing: -0.5 }}>
+            📚 StudyTimer Pro
+          </h1>
+        </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
           <span style={{ opacity: 0.8 }}>

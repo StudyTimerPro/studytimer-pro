@@ -32,6 +32,12 @@ const useStore = create((set) => ({
     setTimeout(() => set({ toast: null }), 3000);
   },
 
+  // ── PDF Export data ───────────────────────
+  exportSessions:    [],
+  setExportSessions: (exportSessions) => set({ exportSessions }),
+  wastageHistory:    {},
+  setWastageHistory: (wastageHistory) => set({ wastageHistory }),
+
 }));
 
 export default useStore;

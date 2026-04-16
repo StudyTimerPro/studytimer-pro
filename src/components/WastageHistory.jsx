@@ -6,7 +6,7 @@ import WastageHistoryTable from "./plan/WastageHistoryTable";
 
 export default function WastageHistory() {
   const { user } = useAuth();
-  const { showToast } = useStore();
+  const { showToast, setWastageHistory } = useStore();
   const [history,  setHistory]  = useState({});
   const [selected, setSelected] = useState(null);
 
@@ -15,6 +15,7 @@ export default function WastageHistory() {
     const unsub = listenWastage(user.uid, (data) => {
       console.log("[WastageHistory] received from Firebase:", data);
       setHistory(data);
+      setWastageHistory(data);
     });
     return () => unsub();
   }, [user]);

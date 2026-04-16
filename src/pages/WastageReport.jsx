@@ -4,9 +4,11 @@ import { db } from "../firebase/config";
 import { ref, onValue, off } from "firebase/database";
 import { saveWastage, getWastageDate, deletePlan } from "../firebase/db";
 import WastageHistory from "../components/WastageHistory";
+import useStore from "../store/useStore";
 
 export default function WastageReport() {
   const { user } = useAuth();
+  const { setExportSessions } = useStore();
   const [allSessions,  setAllSessions]  = useState([]);
   const [todayWastage, setTodayWastage] = useState([]);
   const [totalWastage, setTotalWastage] = useState(0);
@@ -38,6 +40,7 @@ export default function WastageReport() {
       });
       const missed = withStatus.filter(s => s.missed);
       setAllSessions(withStatus);
+      setExportSessions(withStatus);
       setTodayWastage(missed);
       setTotalWastage(missed.reduce((acc, s) => acc + dur(s.start, s.end), 0));
 
