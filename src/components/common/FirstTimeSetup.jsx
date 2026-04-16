@@ -1,9 +1,11 @@
 import React, { useState } from "react";
-import { saveUserSettings } from "../../firebase/db";
+import { updateProfile } from "firebase/auth";
+import { auth } from "../../firebase/config";
+import { saveUserSettings, saveUser } from "../../firebase/db";
 import useStore from "../../store/useStore";
 
 export default function FirstTimeSetup({ user, onComplete }) {
-  const { setSettings } = useStore();
+  const { setSettings, setUser } = useStore();
   const [step, setStep]   = useState(1);
   const [busy, setBusy]   = useState(false);
 
@@ -23,7 +25,18 @@ export default function FirstTimeSetup({ user, onComplete }) {
         examName, examDate, planName, subjectCount,
         firstTimeSetup: true, darkMode: false, setupAt: Date.now(),
       };
+
+      // Update Firebase Auth profile so displayName is immediately available
+      if (auth.currentUser) {
+        await updateProfile(auth.currentUser, { displayName });
+        // Reflect the updated profile in Zustand so Navbar shows new name instantly
+        setUser({ ...auth.currentUser, displayName });
+      }
+
+      // Persist to DB: settings node + top-level user record
       await saveUserSettings(user.uid, settings);
+      await saveUser(user.uid, { name: displayName });
+
       setSettings(settings);
       onComplete(settings);
     } finally { setBusy(false); }
