@@ -66,3 +66,16 @@ export function listenWastage(uid, callback) {
 export function getWastageDate(uid, date) {
   return get(ref(db, `wastage/${uid}/${date}`)).then(snap => snap.val());
 }
+
+export function getWastageAll(uid) {
+  return get(ref(db, `wastage/${uid}`)).then(snap => snap.val() || {});
+}
+
+// ── User Settings ──────────────────────────
+export function saveUserSettings(uid, settings) {
+  return update(ref(db, `users/${uid}/settings`), settings);
+}
+
+export function getUserSettings(uid) {
+  return get(ref(db, `users/${uid}/settings`)).then(snap => snap.val());
+}

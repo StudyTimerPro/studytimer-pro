@@ -13,19 +13,19 @@ const tabs = [
 
 export default function Navbar() {
   const { user, login, logout } = useAuth();
-  const navigate = useNavigate();
-  const location = useLocation();
+  const navigate  = useNavigate();
+  const location  = useLocation();
 
   return (
     <>
       {/* Top bar */}
       <div style={{
-        background: "#1a1814",
+        background: "var(--nav-bg)",
         color: "white",
         padding: "14px 24px",
         display: "flex",
         alignItems: "center",
-        justifyContent: "space-between"
+        justifyContent: "space-between",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <BurgerMenu user={user} />
@@ -41,13 +41,13 @@ export default function Navbar() {
           <button
             onClick={user ? logout : login}
             style={{
-              background: "#2d6a4f",
+              background: "var(--accent)",
               color: "white",
               border: "none",
               borderRadius: 6,
               padding: "7px 14px",
               fontSize: 13,
-              cursor: "pointer"
+              cursor: "pointer",
             }}
           >
             {user ? "Sign out" : "Sign in with Google"}
@@ -57,12 +57,12 @@ export default function Navbar() {
 
       {/* Tab bar */}
       <div style={{
-        background: "white",
-        borderBottom: "2px solid #ddd9d2",
+        background: "var(--surface)",
+        borderBottom: "2px solid var(--border)",
         padding: "0 24px",
         display: "flex",
         gap: 4,
-        overflowX: "auto"
+        overflowX: "auto",
       }}>
         {tabs.map(t => {
           const isActive = location.pathname === t.id;
@@ -77,12 +77,12 @@ export default function Navbar() {
                 fontWeight: 500,
                 background: "none",
                 border: "none",
-                borderBottom: isActive ? "3px solid #2d6a4f" : "3px solid transparent",
+                borderBottom: isActive ? "3px solid var(--accent)" : "3px solid transparent",
                 marginBottom: -2,
-                color: isActive ? "#2d6a4f" : "#6b6560",
+                color: isActive ? "var(--accent)" : "var(--ink2)",
                 cursor: "pointer",
                 whiteSpace: "nowrap",
-                transition: "color .2s"
+                transition: "color .2s",
               }}
             >
               {t.label}

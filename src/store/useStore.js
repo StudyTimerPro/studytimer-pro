@@ -38,6 +38,16 @@ const useStore = create((set) => ({
   wastageHistory:    {},
   setWastageHistory: (wastageHistory) => set({ wastageHistory }),
 
+  // ── Theme / Settings ─────────────────────
+  darkMode:         false,
+  setDarkMode:      (darkMode) => set({ darkMode }),
+  settings:         null,   // null = not yet loaded; {} or obj = loaded
+  setSettings:      (settings) => set({ settings }),
+  settingsLoaded:   false,
+  setSettingsLoaded:(settingsLoaded) => set({ settingsLoaded }),
+  streak:           0,
+  setStreak:        (streak) => set({ streak }),
+
 }));
 
 export default useStore;

@@ -30,41 +30,37 @@ export default function GroupMembers({ members, onlineUids, user, group, isAdmin
 
   return (
     <div>
-      <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 14, color: "#1a1814" }}>
+      <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 14, color: "var(--ink)" }}>
         Members ({sorted.length})
       </h3>
       {sorted.map(([uid, m]) => {
         const isOnline = onlineUids.has(uid);
         const isMe     = uid === user.uid;
         return (
-          <div key={uid} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: "white", borderRadius: 10, marginBottom: 8, border: "1px solid #ddd9d2" }}>
-            {/* Avatar + online dot */}
+          <div key={uid} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: "var(--surface)", borderRadius: 10, marginBottom: 8, border: "1px solid var(--border)" }}>
             <div style={{ position: "relative", flexShrink: 0 }}>
               {m.photo
                 ? <img src={m.photo} alt="" style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover" }} />
-                : <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#ddd9d2", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15 }}>👤</div>}
-              <div style={{ position: "absolute", bottom: 0, right: 0, width: 11, height: 11, borderRadius: "50%", background: isOnline ? "#27ae60" : "#ccc", border: "2px solid white" }} />
+                : <div style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15 }}>👤</div>}
+              <div style={{ position: "absolute", bottom: 0, right: 0, width: 11, height: 11, borderRadius: "50%", background: isOnline ? "#27ae60" : "var(--border)", border: "2px solid var(--surface)" }} />
             </div>
 
-            {/* Name + status */}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 600, fontSize: 14, color: "#1a1814" }}>
+              <div style={{ fontWeight: 600, fontSize: 14, color: "var(--ink)" }}>
                 {m.name}
-                {isMe && <span style={{ color: "#6b6560", fontWeight: 400, fontSize: 12 }}> (you)</span>}
+                {isMe && <span style={{ color: "var(--ink2)", fontWeight: 400, fontSize: 12 }}> (you)</span>}
               </div>
-              <div style={{ fontSize: 12, color: isOnline ? "#27ae60" : "#aaa", marginTop: 1 }}>
+              <div style={{ fontSize: 12, color: isOnline ? "#27ae60" : "var(--ink2)", marginTop: 1 }}>
                 {isOnline ? "🟢 Online" : "⚫ Offline"}
               </div>
             </div>
 
-            {/* Role badge */}
             {m.role === "admin" && (
               <span style={{ fontSize: 10, fontWeight: 700, background: "#fff3e0", color: "#e67e22", padding: "3px 8px", borderRadius: 20, whiteSpace: "nowrap" }}>
                 ADMIN
               </span>
             )}
 
-            {/* Admin actions (not for self, not for other admins) */}
             {isAdmin && !isMe && m.role !== "admin" && (
               <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                 <button onClick={() => handlePromote(uid, m.name)} style={smBtn("#eaf0fb","#2563eb")}>Promote</button>

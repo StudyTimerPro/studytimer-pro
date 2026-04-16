@@ -16,9 +16,9 @@ function useIsMobile() {
 }
 
 export default function Groups() {
-  const { user }     = useAuth();
+  const { user }      = useAuth();
   const { showToast } = useStore();
-  const isMobile     = useIsMobile();
+  const isMobile      = useIsMobile();
   const [groups,     setGroups]     = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [loading,    setLoading]    = useState(false);
@@ -38,7 +38,7 @@ export default function Groups() {
   useEffect(() => { loadGroups(); }, [loadGroups]);
 
   if (!user) return (
-    <div style={{ textAlign: "center", padding: 60, color: "#6b6560" }}>
+    <div style={{ textAlign: "center", padding: 60, color: "var(--ink2)" }}>
       <div style={{ fontSize: 48 }}>👥</div>
       <p style={{ marginTop: 12 }}>Sign in to access Groups.</p>
     </div>
@@ -46,20 +46,17 @@ export default function Groups() {
 
   const selected = groups.find(g => g.id === selectedId) || null;
 
-  // Sidebar: fixed drawer on mobile, inline on desktop
   const sidebarStyle = isMobile
-    ? { position: "fixed", top: 0, left: drawerOpen ? 0 : "-300px", width: 280, height: "100vh", background: "white", zIndex: 300, transition: "left .25s ease", overflowY: "auto", boxShadow: drawerOpen ? "4px 0 24px rgba(0,0,0,.2)" : "none" }
-    : { width: 260, flexShrink: 0, background: "white", borderRight: "1px solid #ddd9d2", overflowY: "auto" };
+    ? { position: "fixed", top: 0, left: drawerOpen ? 0 : "-300px", width: 280, height: "100vh", background: "var(--surface)", zIndex: 300, transition: "left .25s ease", overflowY: "auto", boxShadow: drawerOpen ? "4px 0 24px rgba(0,0,0,.2)" : "none" }
+    : { width: 260, flexShrink: 0, background: "var(--surface)", borderRight: "1px solid var(--border)", overflowY: "auto" };
 
   return (
     <div style={{ display: "flex", margin: "-24px -16px", minHeight: "calc(100vh - 114px)" }}>
-      {/* Mobile backdrop */}
       {isMobile && drawerOpen && (
         <div onClick={() => setDrawerOpen(false)}
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 299 }} />
       )}
 
-      {/* Sidebar */}
       <div style={sidebarStyle}>
         <GroupSidebar
           groups={groups} selectedId={selectedId} user={user} loading={loading}
@@ -71,13 +68,11 @@ export default function Groups() {
         />
       </div>
 
-      {/* Main area */}
-      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", background: "#f0ede8" }}>
-        {/* Mobile top bar */}
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", background: "var(--bg)" }}>
         {isMobile && (
-          <div style={{ padding: "10px 14px", background: "white", borderBottom: "1px solid #ddd9d2", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+          <div style={{ padding: "10px 14px", background: "var(--surface)", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
             <button onClick={() => setDrawerOpen(true)} style={menuBtn}>☰</button>
-            <span style={{ fontWeight: 600, fontSize: 14, color: "#1a1814" }}>
+            <span style={{ fontWeight: 600, fontSize: 14, color: "var(--ink)" }}>
               {selected?.name || "Select a Group"}
             </span>
           </div>
@@ -85,16 +80,13 @@ export default function Groups() {
 
         {selected ? (
           <GroupView
-            key={selected.id}
-            group={selected}
-            user={user}
-            showToast={showToast}
+            key={selected.id} group={selected} user={user} showToast={showToast}
             onGroupUpdated={g => setGroups(prev => prev.map(x => x.id === g.id ? { ...x, ...g } : x))}
             onLeave={() => { setGroups(prev => prev.filter(g => g.id !== selectedId)); setSelectedId(null); }}
             onRefresh={loadGroups}
           />
         ) : (
-          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#6b6560", padding: 40, textAlign: "center" }}>
+          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink2)", padding: 40, textAlign: "center" }}>
             <div>
               <div style={{ fontSize: 48 }}>👥</div>
               <p style={{ marginTop: 12, fontSize: 14 }}>
@@ -113,4 +105,4 @@ export default function Groups() {
   );
 }
 
-const menuBtn = { background: "#1a1814", color: "white", border: "none", borderRadius: 6, padding: "7px 13px", fontSize: 13, cursor: "pointer" };
+const menuBtn = { background: "var(--nav-bg)", color: "white", border: "none", borderRadius: 6, padding: "7px 13px", fontSize: 13, cursor: "pointer" };

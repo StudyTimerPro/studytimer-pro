@@ -13,7 +13,6 @@ export default function WastageHistory() {
   useEffect(() => {
     if (!user) return;
     const unsub = listenWastage(user.uid, (data) => {
-      console.log("[WastageHistory] received from Firebase:", data);
       setHistory(data);
       setWastageHistory(data);
     });
@@ -22,7 +21,6 @@ export default function WastageHistory() {
 
   const dates = Object.keys(history).sort((a, b) => b.localeCompare(a));
 
-  // Collect unique session keys (subject or name) across all dates
   const sessionKeys = [];
   const seen = new Set();
   dates.forEach(date => {
@@ -53,41 +51,34 @@ export default function WastageHistory() {
   }
 
   if (!user) return (
-    <p style={{ textAlign: "center", color: "#6b6560", padding: 24 }}>
+    <p style={{ textAlign: "center", color: "var(--ink2)", padding: 24 }}>
       Sign in to see all-time history.
     </p>
   );
 
   return (
     <div style={{ marginTop: 32 }}>
-      {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
-        <h2 style={{ fontSize: 20, fontWeight: 700, color: "#1a1814" }}>All-Time Wastage By Date</h2>
+        <h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--ink)" }}>All-Time Wastage By Date</h2>
         <button onClick={handleRemoveSelected} disabled={!selected} style={outlineBtn(!selected)}>
           Remove Selected {selected ? `(${selected})` : "Entry"}
         </button>
       </div>
 
-      {/* Table / Cards */}
-      <div style={{ overflowX: "auto", background: "white", borderRadius: 10, border: "1px solid #ddd9d2", boxShadow: "0 2px 12px rgba(0,0,0,.08)", marginBottom: 16 }}>
+      <div style={{ overflowX: "auto", background: "var(--surface)", borderRadius: 10, border: "1px solid var(--border)", boxShadow: "var(--shadow)", marginBottom: 16 }}>
         <WastageHistoryTable
-          history={history}
-          dates={dates}
-          sessionKeys={sessionKeys}
-          selected={selected}
-          onSelect={setSelected}
-          totalMissed={totalMissed}
-          totalMins={totalMins}
+          history={history} dates={dates} sessionKeys={sessionKeys}
+          selected={selected} onSelect={setSelected}
+          totalMissed={totalMissed} totalMins={totalMins}
         />
       </div>
 
-      {/* Footer */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
-        <p style={{ fontSize: 14, fontWeight: 600, color: "#1a1814", margin: 0 }}>
+        <p style={{ fontSize: 14, fontWeight: 600, color: "var(--ink)", margin: 0 }}>
           Total wastage:{" "}
-          <span style={{ fontFamily: "monospace", color: "#e63946" }}>{toHHMMSS(totalMins)}</span>
+          <span style={{ fontFamily: "monospace", color: "var(--red)" }}>{toHHMMSS(totalMins)}</span>
           {" | "}Missed:{" "}
-          <span style={{ color: "#e63946" }}>{totalMissed}</span>
+          <span style={{ color: "var(--red)" }}>{totalMissed}</span>
         </p>
         <button onClick={handleResetAll} style={redBtn}>Reset All</button>
       </div>
@@ -101,15 +92,12 @@ function toHHMMSS(mins) {
   return `${String(h).padStart(2, "0")}:${String(mm).padStart(2, "0")}:00`;
 }
 
-const redBtn = {
-  background: "#e63946", color: "white", border: "none",
-  borderRadius: 8, padding: "9px 20px", fontSize: 14, fontWeight: 500, cursor: "pointer",
-};
+const redBtn = { background: "var(--red)", color: "white", border: "none", borderRadius: 8, padding: "9px 20px", fontSize: 14, fontWeight: 500, cursor: "pointer" };
 function outlineBtn(disabled) {
   return {
-    background: disabled ? "#f8f6f2" : "white",
-    color: disabled ? "#aaa" : "#e63946",
-    border: `1.5px solid ${disabled ? "#ddd9d2" : "#e63946"}`,
+    background: disabled ? "var(--bg)" : "var(--surface)",
+    color: disabled ? "var(--ink2)" : "var(--red)",
+    border: `1.5px solid ${disabled ? "var(--border)" : "var(--red)"}`,
     borderRadius: 8, padding: "9px 20px", fontSize: 13, fontWeight: 500,
     cursor: disabled ? "not-allowed" : "pointer",
   };
