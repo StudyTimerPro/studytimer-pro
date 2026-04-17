@@ -6,12 +6,12 @@ function makeCode() {
 }
 
 // ── Groups CRUD ──────────────────────────────────────────────
-export async function createGroup(uid, user, { name, description, banner }) {
+export async function createGroup(uid, user, { name, description, banner, icon }) {
   const gRef = push(ref(db, "groups"));
   const gid  = gRef.key;
   const code = makeCode();
   const me   = { name: user.displayName || "User", photo: user.photoURL || "", role: "admin", joinedAt: Date.now(), online: false };
-  const data = { name, description: description || "", banner: banner || "#2d6a4f", inviteCode: code, createdBy: uid, createdAt: Date.now(), members: { [uid]: me } };
+  const data = { name, description: description || "", banner: banner || "#2d6a4f", icon: icon || "📚", inviteCode: code, createdBy: uid, createdAt: Date.now(), members: { [uid]: me } };
   await set(gRef, data);
   await set(ref(db, `inviteCodes/${code}`), gid);
   await set(ref(db, `users/${uid}/groups/${gid}`), Date.now());
@@ -50,6 +50,10 @@ export async function updateGroup(gid, data) {
 
 export async function promoteMember(gid, memberUid) {
   return update(ref(db, `groups/${gid}/members/${memberUid}`), { role: "admin" });
+}
+
+export function demoteMember(gid, memberUid) {
+  return update(ref(db, `groups/${gid}/members/${memberUid}`), { role: "member" });
 }
 
 // ── One-time data loads ──────────────────────────────────────
@@ -121,10 +125,10 @@ export async function setupPresence(uid, gid) {
 export async function shareGroupPlan(uid, userName, groupId, { name, sessions }) {
   const snap = await get(ref(db, `groups/${groupId}/members/${uid}`));
   const role = snap.exists() ? snap.val().role : "member";
-  const status = role === "admin" ? "approved" : "pending";
+  const approved = role === "admin";
   const planRef = push(ref(db, `groups/${groupId}/plans`));
-  await set(planRef, { name, sessions, sharedBy: uid, sharedByName: userName, status, sharedAt: Date.now() });
-  return status;
+  await set(planRef, { name, sessions, sharedBy: uid, sharedByName: userName, approved, likeCount: 0, enrollCount: 0, pinned: false, createdAt: Date.now() });
+  return approved ? "approved" : "pending";
 }
 
 // ── Real-time: chat ──────────────────────────────────────────

@@ -1,16 +1,16 @@
 import React, { useEffect, useState, useRef } from "react";
-import { uploadAndSaveLibraryItem, listenLibraryItems, approveLibraryItem, rejectLibraryItem, incrementViewCount } from "../../firebase/groupsLibrary";
+import { uploadAndSaveLibraryItem, listenLibraryItems, approveLibraryItem, incrementViewCount, removeMaterial } from "../../firebase/groupsLibrary";
+import { toggleLikeMaterial, pinMaterial } from "../../firebase/groupsEngagement";
+import GroupLibraryCard from "./GroupLibraryCard";
 
 const MAX_SIZE    = 20 * 1024 * 1024;
 const ALLOWED     = ["application/pdf", "text/plain", "image/jpeg", "image/jpg", "image/png"];
 const ALLOWED_EXT = [".pdf", ".txt", ".jpg", ".jpeg", ".png"];
 
-function fileIcon(type) {
-  if (type === "pdf")   return "📄";
-  if (type === "txt")   return "📝";
-  if (type === "image") return "🖼️";
-  return "🔗";
-}
+const GRID_CSS = `
+.gl-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+@media (max-width: 640px) { .gl-grid { grid-template-columns: repeat(2, 1fr); } }
+`;
 
 export default function GroupLibrary({ groupId, user, isAdmin, showToast }) {
   const [items,     setItems]     = useState([]);
@@ -19,7 +19,13 @@ export default function GroupLibrary({ groupId, user, isAdmin, showToast }) {
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef(null);
 
-  useEffect(() => listenLibraryItems(groupId, setItems), [groupId]);
+  useEffect(() => listenLibraryItems(groupId, list => {
+    setItems(list.slice().sort((a, b) => {
+      if (a.pinned && !b.pinned) return -1;
+      if (!a.pinned && b.pinned) return 1;
+      return b.createdAt - a.createdAt;
+    }));
+  }), [groupId]);
 
   async function handleFileUpload(e) {
     const file = e.target.files?.[0];
@@ -31,7 +37,7 @@ export default function GroupLibrary({ groupId, user, isAdmin, showToast }) {
     try {
       await uploadAndSaveLibraryItem(groupId, user.uid, user.displayName || "User", { file }, isAdmin);
       showToast(isAdmin ? "Uploaded ✓" : "Uploaded — pending admin approval");
-    } catch (err) { console.error("Library upload error:", err); showToast("Upload failed"); }
+    } catch (err) { console.error(err); showToast("Upload failed"); }
     finally { setUploading(false); }
   }
 
@@ -42,7 +48,7 @@ export default function GroupLibrary({ groupId, user, isAdmin, showToast }) {
       await uploadAndSaveLibraryItem(groupId, user.uid, user.displayName || "User", { linkUrl: link.trim(), linkName: linkName.trim() || link.trim() }, isAdmin);
       setLink(""); setLinkName("");
       showToast(isAdmin ? "Link added ✓" : "Link added — pending admin approval");
-    } catch (err) { console.error("Library link error:", err); showToast("Failed to add link"); }
+    } catch (err) { console.error(err); showToast("Failed"); }
     finally { setUploading(false); }
   }
 
@@ -51,14 +57,33 @@ export default function GroupLibrary({ groupId, user, isAdmin, showToast }) {
     window.open(item.url, "_blank", "noopener,noreferrer");
   }
 
-  const approved = items.filter(i => i.approved);
-  const pending  = items.filter(i => !i.approved);
+  async function handleLike(item) {
+    try { await toggleLikeMaterial(groupId, item.id, user.uid); }
+    catch { showToast("Failed to like"); }
+  }
+
+  async function handlePin(item) {
+    try { await pinMaterial(groupId, item.id, !item.pinned); }
+    catch { showToast("Failed to pin"); }
+  }
+
+  async function handleApprove(itemId) {
+    try { await approveLibraryItem(groupId, itemId); showToast("Approved ✓"); }
+    catch { showToast("Failed"); }
+  }
+
+  async function handleRemove(itemId) {
+    if (!confirm("Remove this material?")) return;
+    try { await removeMaterial(groupId, itemId); showToast("Removed"); }
+    catch { showToast("Failed"); }
+  }
 
   return (
     <div>
-      {/* Upload Section */}
+      <style>{GRID_CSS}</style>
+
       <div style={{ background: "var(--surface)", borderRadius: 10, padding: 14, border: "1px solid var(--border)", marginBottom: 16 }}>
-        <h4 style={{ fontWeight: 700, fontSize: 14, marginBottom: 12, color: "var(--ink)" }}>📤 Add Material</h4>
+        <h4 style={{ fontWeight: 700, fontSize: 14, marginBottom: 10, color: "var(--ink)" }}>📤 Add Material</h4>
         <div style={{ marginBottom: 8 }}>
           <input ref={fileRef} type="file" accept={ALLOWED_EXT.join(",")} style={{ display: "none" }} onChange={handleFileUpload} />
           <button onClick={() => fileRef.current?.click()} disabled={uploading} style={upBtn}>
@@ -67,51 +92,22 @@ export default function GroupLibrary({ groupId, user, isAdmin, showToast }) {
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <input value={linkName} onChange={e => setLinkName(e.target.value)} placeholder="Link name (optional)" style={{ ...inputS, flex: "0 0 150px" }} />
-          <input value={link} onChange={e => setLink(e.target.value)} placeholder="Paste URL..." style={{ ...inputS, flex: 1, minWidth: 120 }} onKeyDown={e => e.key === "Enter" && handleLinkUpload()} />
+          <input value={link} onChange={e => setLink(e.target.value)} placeholder="Paste URL..." style={{ ...inputS, flex: 1, minWidth: 100 }} onKeyDown={e => e.key === "Enter" && handleLinkUpload()} />
           <button onClick={handleLinkUpload} disabled={uploading} style={upBtn}>🔗 Add Link</button>
         </div>
       </div>
 
-      {/* Admin: Pending Approval */}
-      {isAdmin && pending.length > 0 && (
-        <div style={{ marginBottom: 16 }}>
-          <h4 style={{ fontWeight: 700, fontSize: 14, marginBottom: 10, color: "var(--ink)" }}>⏳ Pending Approval ({pending.length})</h4>
-          {pending.map(item => (
-            <LibCard key={item.id} item={item} onView={handleView}
-              adminActions={
-                <>
-                  <button onClick={() => approveLibraryItem(groupId, item.id).then(() => showToast("Approved ✓")).catch(() => showToast("Failed"))}  style={aBtn("#eaf0fb","#2563eb")}>✓</button>
-                  <button onClick={() => rejectLibraryItem(groupId, item.id).then(() => showToast("Rejected")).catch(() => showToast("Failed"))} style={aBtn("#fde8e8","#e63946")}>✕</button>
-                </>
-              }
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Approved Materials */}
-      <h4 style={{ fontWeight: 700, fontSize: 14, marginBottom: 10, color: "var(--ink)" }}>📚 Materials ({approved.length})</h4>
-      {approved.length === 0 && <p style={{ color: "var(--ink2)", fontSize: 13 }}>No materials yet. Be the first to share!</p>}
-      {approved.map(item => <LibCard key={item.id} item={item} onView={handleView} />)}
-    </div>
-  );
-}
-
-function LibCard({ item, onView, adminActions }) {
-  return (
-    <div style={{ background: "var(--surface)", borderRadius: 10, padding: "12px 14px", marginBottom: 8, border: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-      <span style={{ fontSize: 22, flexShrink: 0 }}>{fileIcon(item.type)}</span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 600, fontSize: 13, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
-        <div style={{ fontSize: 11, color: "var(--ink2)", marginTop: 2 }}>
-          By {item.uploadedByName} · {new Date(item.createdAt).toLocaleDateString()} · 👁 {item.viewCount || 0} views
-        </div>
-      </div>
-      <div style={{ display: "flex", gap: 6, flexShrink: 0, alignItems: "center" }}>
-        {adminActions}
-        <button onClick={() => onView(item)} style={aBtn("var(--bg)", "var(--accent)", "1.5px solid var(--border)")}>
-          {item.type === "link" ? "🔗 Visit" : "⬇ View"}
-        </button>
+      {items.length === 0 && <p style={{ color: "var(--ink2)", fontSize: 13 }}>No materials yet. Be the first to share!</p>}
+      <div className="gl-grid">
+        {items.map(item => (
+          <GroupLibraryCard key={item.id} item={item} uid={user.uid} isAdmin={isAdmin}
+            onView={() => handleView(item)}
+            onLike={() => handleLike(item)}
+            onPin={() => handlePin(item)}
+            onApprove={() => handleApprove(item.id)}
+            onRemove={() => handleRemove(item.id)}
+          />
+        ))}
       </div>
     </div>
   );
@@ -119,4 +115,3 @@ function LibCard({ item, onView, adminActions }) {
 
 const inputS = { padding: "8px 10px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 13, background: "var(--bg)", color: "var(--ink)", fontFamily: "inherit", boxSizing: "border-box" };
 const upBtn  = { background: "var(--bg)", color: "var(--accent)", border: "1.5px solid var(--border)", borderRadius: 8, padding: "8px 12px", fontSize: 12, fontWeight: 500, cursor: "pointer", whiteSpace: "nowrap" };
-const aBtn   = (bg, color, border = "none") => ({ background: bg, color, border, borderRadius: 6, padding: "5px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer" });

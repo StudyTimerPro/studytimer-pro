@@ -1,6 +1,6 @@
 import { db, storage } from "./config";
 import { ref as dbRef, set, get, update, remove, onValue, off, push } from "firebase/database";
-import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
+import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 
 function getFileType(file) {
   const ext = file.name.split(".").pop().toLowerCase();
@@ -11,21 +11,22 @@ function getFileType(file) {
 }
 
 export async function uploadAndSaveLibraryItem(groupId, uid, userName, { file, linkUrl, linkName }, isAdmin) {
-  let url, name, type;
+  let url, name, type, storagePath = "";
   if (file) {
     const ts = Date.now();
-    const sRef = storageRef(storage, `groupFiles/${groupId}/${ts}_${file.name}`);
+    storagePath = `groupFiles/${groupId}/${ts}_${file.name}`;
+    const sRef = storageRef(storage, storagePath);
     await uploadBytes(sRef, file);
-    url = await getDownloadURL(sRef);
+    url  = await getDownloadURL(sRef);
     name = file.name;
     type = getFileType(file);
   } else {
-    url = linkUrl;
+    url  = linkUrl;
     name = linkName || linkUrl;
     type = "link";
   }
   const r = push(dbRef(db, `groups/${groupId}/library`));
-  await set(r, { name, type, url, uploadedBy: uid, uploadedByName: userName, viewCount: 0, approved: isAdmin, createdAt: Date.now() });
+  await set(r, { name, type, url, storagePath, uploadedBy: uid, uploadedByName: userName, viewCount: 0, likeCount: 0, approved: isAdmin, pinned: false, createdAt: Date.now() });
   return r.key;
 }
 
@@ -45,6 +46,17 @@ export function approveLibraryItem(groupId, itemId) {
 }
 
 export function rejectLibraryItem(groupId, itemId) {
+  return remove(dbRef(db, `groups/${groupId}/library/${itemId}`));
+}
+
+export async function removeMaterial(groupId, itemId) {
+  const snap = await get(dbRef(db, `groups/${groupId}/library/${itemId}`));
+  if (snap.exists()) {
+    const { storagePath } = snap.val();
+    if (storagePath) {
+      try { await deleteObject(storageRef(storage, storagePath)); } catch {}
+    }
+  }
   return remove(dbRef(db, `groups/${groupId}/library/${itemId}`));
 }
 

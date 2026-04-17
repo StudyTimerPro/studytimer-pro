@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { createGroup, joinGroup, searchGroups, sendJoinRequest } from "../../firebase/groupsDb";
 
 const BANNERS = ["#2d6a4f","#2563eb","#7c3aed","#dc2626","#d97706","#0891b2","#1a1814","#db2777"];
+const ICONS   = ["📚","🎓","✏️","🔬","🧪","🧮","💻","🎯","🏆","📐","🌍","⚡","🔭","📊","🎨","🏫"];
 
 export default function GroupSidebar({ groups, selectedId, user, loading, onSelect, onGroupsChange, showToast, onClose, isMobile }) {
   const [search,        setSearch]        = useState("");
@@ -31,7 +32,7 @@ export default function GroupSidebar({ groups, selectedId, user, loading, onSele
     if (!form.name?.trim()) { showToast("Group name required"); return; }
     setBusy(true);
     try {
-      const g = await createGroup(user.uid, user, { name: form.name.trim(), description: form.desc || "", banner: form.banner || "#2d6a4f" });
+      const g = await createGroup(user.uid, user, { name: form.name.trim(), description: form.desc || "", banner: form.banner || "#2d6a4f", icon: form.icon || "📚" });
       onGroupsChange(prev => [...prev, g]);
       onSelect(g.id); setModal(null); showToast("Group created!");
     } catch { showToast("Failed to create group"); }
@@ -94,7 +95,7 @@ export default function GroupSidebar({ groups, selectedId, user, loading, onSele
           return (
             <div key={g.id} onClick={() => onSelect(g.id)}
               style={{ padding: "11px 14px", cursor: "pointer", borderBottom: "1px solid var(--border)", background: isActive ? "var(--accent-light)" : "var(--surface)", display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ width: 10, height: 10, borderRadius: "50%", background: g.banner || "var(--accent)", flexShrink: 0 }} />
+              <div style={{ width: 28, height: 28, borderRadius: 6, background: g.banner || "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0 }}>{g.icon || "📚"}</div>
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ fontWeight: 600, fontSize: 14, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.name}</div>
                 <div style={{ fontSize: 11, color: "var(--ink2)", marginTop: 1 }}>{count} member{count !== 1 ? "s" : ""}</div>
@@ -150,6 +151,14 @@ export default function GroupSidebar({ groups, selectedId, user, loading, onSele
                     {BANNERS.map(c => (
                       <div key={c} onClick={() => setForm({ ...form, banner: c })}
                         style={{ width: 28, height: 28, borderRadius: 6, background: c, cursor: "pointer", border: form.banner === c ? "3px solid var(--ink)" : "2px solid transparent" }} />
+                    ))}
+                  </div>
+                </MField>
+                <MField label="Group Icon">
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {ICONS.map(ic => (
+                      <button key={ic} type="button" onClick={() => setForm({ ...form, icon: ic })}
+                        style={{ fontSize: 20, border: (form.icon || "📚") === ic ? "2px solid var(--accent)" : "2px solid transparent", borderRadius: 6, padding: 4, cursor: "pointer", background: "none", lineHeight: 1 }}>{ic}</button>
                     ))}
                   </div>
                 </MField>
