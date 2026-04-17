@@ -3,7 +3,7 @@ import {
   ref, set, get, push, update, remove, onValue, off, runTransaction,
 } from "firebase/database";
 
-// ── Plans ──────────────────────────────────
+// ── Plans (legacy flat structure, kept for backward compat) ────────
 export function savePlan(uid, data) {
   return push(ref(db, `plans/${uid}/sessions`), data);
 }
@@ -25,6 +25,151 @@ export function listenPlans(uid, callback) {
     callback(list);
   });
   return () => off(r);
+}
+
+// ── Exams ──────────────────────────────────────────────────────────
+export async function saveExam(uid, { name }) {
+  const r = push(ref(db, `exams/${uid}`));
+  await set(r, { name, createdAt: Date.now() });
+  return r.key;
+}
+
+export async function getExams(uid) {
+  const snap = await get(ref(db, `exams/${uid}`));
+  const data = snap.val() || {};
+  return Object.entries(data).map(([id, v]) => ({
+    id,
+    name: v.name || "Untitled",
+    createdAt: v.createdAt || 0,
+  })).sort((a, b) => a.createdAt - b.createdAt);
+}
+
+export function deleteExam(uid, examId) {
+  return remove(ref(db, `exams/${uid}/${examId}`));
+}
+
+export function renameExam(uid, examId, name) {
+  return update(ref(db, `exams/${uid}/${examId}`), { name });
+}
+
+// ── Plans under an exam ────────────────────────────────────────────
+export async function savePlanToExam(uid, examId, planName, sessions) {
+  const planRef = push(ref(db, `exams/${uid}/${examId}/plans`));
+  const planId = planRef.key;
+  await set(planRef, { name: planName, createdAt: Date.now() });
+  const sessionsRef = ref(db, `exams/${uid}/${examId}/plans/${planId}/sessions`);
+  const writes = sessions.map(s => {
+    const sRef = push(sessionsRef);
+    return set(sRef, { ...s, createdAt: Date.now() });
+  });
+  await Promise.all(writes);
+  return planId;
+}
+
+export async function createEmptyPlan(uid, examId, planName) {
+  const planRef = push(ref(db, `exams/${uid}/${examId}/plans`));
+  await set(planRef, { name: planName, createdAt: Date.now() });
+  return planRef.key;
+}
+
+export async function getPlans(uid, examId) {
+  const snap = await get(ref(db, `exams/${uid}/${examId}/plans`));
+  const data = snap.val() || {};
+  return Object.entries(data).map(([id, v]) => ({
+    id,
+    name: v.name || "Untitled",
+    createdAt: v.createdAt || 0,
+    sessionCount: v.sessions ? Object.keys(v.sessions).length : 0,
+  })).sort((a, b) => a.createdAt - b.createdAt);
+}
+
+export function deletePlanFromExam(uid, examId, planId) {
+  return remove(ref(db, `exams/${uid}/${examId}/plans/${planId}`));
+}
+
+export function renamePlan(uid, examId, planId, name) {
+  return update(ref(db, `exams/${uid}/${examId}/plans/${planId}`), { name });
+}
+
+// ── Sessions inside a plan ─────────────────────────────────────────
+export function listenPlanSessions(uid, examId, planId, callback) {
+  const r = ref(db, `exams/${uid}/${examId}/plans/${planId}/sessions`);
+  const cb = snap => {
+    const data = snap.val() || {};
+    const list = Object.entries(data).map(([id, v]) => ({ id, ...v }));
+    list.sort((a, b) => (a.start || "").localeCompare(b.start || ""));
+    callback(list);
+  };
+  onValue(r, cb);
+  return () => off(r, "value", cb);
+}
+
+export function savePlanSession(uid, examId, planId, data) {
+  return push(ref(db, `exams/${uid}/${examId}/plans/${planId}/sessions`), data);
+}
+
+export function updatePlanSession(uid, examId, planId, sessionId, data) {
+  return update(ref(db, `exams/${uid}/${examId}/plans/${planId}/sessions/${sessionId}`), data);
+}
+
+export function deletePlanSession(uid, examId, planId, sessionId) {
+  return remove(ref(db, `exams/${uid}/${examId}/plans/${planId}/sessions/${sessionId}`));
+}
+
+// ── Export / Import ────────────────────────────────────────────────
+export async function exportExam(uid, examId) {
+  const snap = await get(ref(db, `exams/${uid}/${examId}`));
+  const raw = snap.val();
+  if (!raw) return null;
+  const plans = [];
+  const rawPlans = raw.plans || {};
+  for (const [, p] of Object.entries(rawPlans)) {
+    const sessions = Object.values(p.sessions || {}).map(stripSessionForExport);
+    plans.push({ name: p.name || "Untitled", sessions });
+  }
+  return {
+    type: "studytimer-exam",
+    version: "1.0",
+    exam: { name: raw.name, createdAt: raw.createdAt || Date.now() },
+    plans,
+  };
+}
+
+export async function exportPlan(uid, examId, planId) {
+  const snap = await get(ref(db, `exams/${uid}/${examId}/plans/${planId}`));
+  const raw = snap.val();
+  if (!raw) return null;
+  const sessions = Object.values(raw.sessions || {}).map(stripSessionForExport);
+  return {
+    type: "studytimer-plan",
+    version: "1.0",
+    plan: { name: raw.name || "Untitled", sessions },
+  };
+}
+
+export async function importExam(uid, examData) {
+  const data = examData?.exam ? examData : { exam: { name: "Imported" }, plans: [] };
+  const examId = await saveExam(uid, { name: data.exam?.name || "Imported Exam" });
+  for (const plan of data.plans || []) {
+    await savePlanToExam(uid, examId, plan.name || "Untitled", plan.sessions || []);
+  }
+  return examId;
+}
+
+export async function importPlan(uid, examId, planData) {
+  const plan = planData?.plan || planData;
+  return savePlanToExam(uid, examId, plan.name || "Imported Plan", plan.sessions || []);
+}
+
+function stripSessionForExport(s) {
+  return {
+    name: s.name || "",
+    start: s.start || "",
+    end: s.end || "",
+    breakMins: s.breakMins || 0,
+    priority: s.priority || "medium",
+    material: s.material || "",
+  };
 }
 
 // ── Leaderboard ────────────────────────────

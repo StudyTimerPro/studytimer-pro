@@ -10,6 +10,22 @@ const useStore = create((set) => ({
   sessions: [],
   setSessions: (sessions) => set({ sessions }),
 
+  // ── Exams ─────────────────────────────────
+  exams: [],
+  setExams: (exams) => set({ exams }),
+  currentExamId: null,
+  setCurrentExamId: (currentExamId) => set({ currentExamId }),
+  currentExamName: "",
+  setCurrentExamName: (currentExamName) => set({ currentExamName }),
+
+  // ── Plans ─────────────────────────────────
+  plans: [],
+  setPlans: (plans) => set({ plans }),
+  currentPlanId: null,
+  setCurrentPlanId: (currentPlanId) => set({ currentPlanId }),
+  currentPlanName: "",
+  setCurrentPlanName: (currentPlanName) => set({ currentPlanName }),
+
   // ── Active Timer Session ──────────────────
   activeSession: null,
   setActiveSession: (activeSession) => set({ activeSession }),

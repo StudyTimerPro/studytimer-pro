@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useRef } from "react";
-import { savePlan, getUserTokens, decrementUserTokens } from "../../firebase/db";
+import {
+  getUserTokens, decrementUserTokens,
+  saveExam, savePlanToExam, getExams, getPlans,
+} from "../../firebase/db";
 import {
   callAI, callAIStream, getLanguageReminder, getLanguageSample,
   parseStudyInfo, stage1AnalyzeExam, stage2ParseAnalysis,
   convertToPlansFormat, applyConstraints, addRevisionSessions,
-  plansToFirebaseSessions,
+  saveAIPlansToExam,
 } from "../../utils/aiService";
 import useStore from "../../store/useStore";
 
@@ -19,9 +22,16 @@ const msgT = (lang, en, ta, hi) => (lang === "tamil" ? ta : lang === "hindi" ? h
 
 // ── Component ────────────────────────────────────────────────────────────────
 export default function AIPlanModal({ user, onClose, onCreated }) {
-  const { showToast, settings } = useStore();
+  const {
+    showToast, settings,
+    currentExamId, setCurrentExamId,
+    currentExamName, setCurrentExamName,
+    exams, setExams, setPlans,
+    setCurrentPlanId, setCurrentPlanName,
+  } = useStore();
   const language   = (settings?.language || "english").toLowerCase();
-  const examName   = (settings?.examName || "").trim() || "Unknown Exam";
+  const fallbackExamName = (settings?.examName || "").trim() || "Unknown Exam";
+  const examName   = (currentExamName || "").trim() || fallbackExamName;
   const examDate   = settings?.examDate || "";
 
   const [tab, setTab]       = useState(0);
@@ -32,6 +42,7 @@ export default function AIPlanModal({ user, onClose, onCreated }) {
   const [tokens, setTokens] = useState(null);
   const [splash, setSplash] = useState(false);
   const [stage, setStage]   = useState(null);
+  const [waitingExamName, setWaitingExamName] = useState(false);
 
   const planHistory   = useRef([]);
   const qaHistory     = useRef([]);
@@ -84,6 +95,17 @@ export default function AIPlanModal({ user, onClose, onCreated }) {
 
   // ── Plan tab auto-start: kickoff AI-generated greeting then splash ──
   async function autoStartPlan() {
+    // First ensure we have a current exam selected
+    if (!currentExamId) {
+      appendPlan("assistant", msgT(language,
+        "Before I create a plan — what exam are you preparing for? Type the exam name (eg: SSC JE Electrical).",
+        "Plan create panra munadi — enna exam ku prep panra? Exam name type pannu (eg: SSC JE Electrical).",
+        "Plan banane se pehle — kaunsa exam hai? Exam naam likho (eg: SSC JE Electrical)."
+      ));
+      setWaitingExamName(true);
+      return;
+    }
+
     appendPlan("assistant", "Please wait Setting things up… ⚡");
     const dleft = daysLeft(examDate);
     try {
@@ -189,6 +211,27 @@ export default function AIPlanModal({ user, onClose, onCreated }) {
   async function sendPlan(text) {
     appendPlan("user", text);
 
+    if (waitingExamName) {
+      setWaitingExamName(false);
+      try {
+        const examId = await saveExam(user.uid, { name: text.trim() });
+        setCurrentExamId(examId);
+        setCurrentExamName(text.trim());
+        const fresh = await getExams(user.uid);
+        setExams(fresh);
+        appendPlan("assistant", msgT(language,
+          `✅ Exam "${text.trim()}" saved! Let's set things up...`,
+          `✅ Exam "${text.trim()}" save aachu! Setup pandren...`,
+          `✅ Exam "${text.trim()}" save ho gaya! Setup kar raha...`
+        ));
+        // Continue to plan kickoff
+        setTimeout(() => autoStartPlan(), 400);
+      } catch (err) {
+        appendPlan("assistant", `⚠️ Failed to save exam: ${err.message || err}`);
+      }
+      return;
+    }
+
     if (waitingTopics.current) {
       specTopics.current = text;
       waitingTopics.current = false;
@@ -289,12 +332,29 @@ export default function AIPlanModal({ user, onClose, onCreated }) {
       plans = applyConstraints(plans, studyHours.current);
       plans = addRevisionSessions(plans);
 
-      const records = plansToFirebaseSessions(plans);
-      await Promise.all(records.map(r => savePlan(user.uid, { ...r, createdAt: Date.now() })));
+      if (!currentExamId) {
+        appendPlan("assistant", "⚠️ No exam selected. Please add an exam first.");
+        setStage(null); setBusy(false); return;
+      }
+
+      const { plansCreated, sessionsCreated } = await saveAIPlansToExam(
+        savePlanToExam, user.uid, currentExamId, plans
+      );
+
+      // Refresh plans list in store so ExamPlanSelector picks up new plans
+      const freshPlans = await getPlans(user.uid, currentExamId);
+      setPlans(freshPlans);
+      if (freshPlans.length && !freshPlans.find(p => p.id)) {
+        // noop safety
+      }
+      // Auto-select the first newly created plan so sessions appear immediately
+      const firstNew = freshPlans[freshPlans.length - plansCreated];
+      if (firstNew) { setCurrentPlanId(firstNew.id); setCurrentPlanName(firstNew.name); }
+
       await decrementUserTokens(user.uid);
       setTokens(t => Math.max(0, (t ?? 1) - 1));
 
-      const summary = [`✅ ${Object.keys(plans).length} plans created!\n`];
+      const summary = [`✅ Created ${plansCreated} plans with ${sessionsCreated} sessions under ${examName}\n`];
       for (const entry of Object.values(plans)) {
         const highCount = entry.sessions.filter(s => s[4] === "High").length;
         summary.push(`• ${entry.displayName}: ${entry.sessions.length} sessions (${highCount} High priority)`);
@@ -302,7 +362,7 @@ export default function AIPlanModal({ user, onClose, onCreated }) {
       appendPlan("assistant", summary.join("\n"));
       setStage(null);
       setBusy(false);
-      onCreated(records.length);
+      onCreated?.(sessionsCreated, plansCreated);
     } catch (err) {
       setStage(null); setBusy(false);
       appendPlan("assistant", `⚠️ Error: ${err.message || err}\n\nPlease try again.`);

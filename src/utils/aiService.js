@@ -423,6 +423,38 @@ export function plansToFirebaseSessions(plansDict) {
   return records;
 }
 
+// ─── Convert plans dict → per-subject session arrays (exam/plan structure) ──
+export function plansToExamPlans(plansDict) {
+  const result = [];
+  for (const entry of Object.values(plansDict)) {
+    const sessions = [];
+    for (const s of entry.sessions) {
+      if (!Array.isArray(s) || s.length < 5) continue;
+      sessions.push({
+        name: cleanSessionName(s[0]),
+        start: s[1],
+        end: s[2],
+        breakMins: breakStringToMins(s[3]),
+        priority: String(s[4] || "medium").toLowerCase(),
+        material: "",
+      });
+    }
+    if (sessions.length) result.push({ name: entry.displayName, sessions });
+  }
+  return result;
+}
+
+// ─── Save each subject as its own plan under the given exam ────────────────
+export async function saveAIPlansToExam(savePlanToExam, uid, examId, plansDict) {
+  const plans = plansToExamPlans(plansDict);
+  let totalSessions = 0;
+  for (const plan of plans) {
+    await savePlanToExam(uid, examId, plan.name, plan.sessions);
+    totalSessions += plan.sessions.length;
+  }
+  return { plansCreated: plans.length, sessionsCreated: totalSessions };
+}
+
 function cleanSessionName(n) {
   let name = String(n || "").replace(/[\u{1F300}-\u{1F9FF}]/gu, "").trim();
   name = name.replace(/_/g, " ").replace(/[,;:]+\s*$/, "").replace(/\s+/g, " ").trim();
