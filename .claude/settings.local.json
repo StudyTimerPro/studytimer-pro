@@ -5,7 +5,8 @@
       "Bash(xargs wc *)",
       "Bash(xargs grep *)",
       "Bash(find /c/Users/krish/studytimer-pro/src -type f \\\\\\( -name \"*.jsx\" -o -name \"*.js\" \\\\\\) -exec wc -l {} +)",
-      "Bash(ls C:/Users/krish/studytimer-pro/.env*)"
+      "Bash(ls C:/Users/krish/studytimer-pro/.env*)",
+      "Bash(npx vite *)"
     ]
   }
 }

@@ -1,190 +1,376 @@
 import React, { useState, useEffect, useRef } from "react";
 import { savePlan, getUserTokens, decrementUserTokens } from "../../firebase/db";
-import { callAIStream } from "../../utils/aiService";
+import {
+  callAI, callAIStream, getLanguageReminder, getLanguageSample,
+  parseStudyInfo, stage1AnalyzeExam, stage2ParseAnalysis,
+  convertToPlansFormat, applyConstraints, addRevisionSessions,
+  plansToFirebaseSessions,
+} from "../../utils/aiService";
 import useStore from "../../store/useStore";
 
-// ── Prompts ───────────────────────────────────────────────────────────────────
-const SYSTEMS = [
-  /* Tab 0 — Q&A */
-  `You are an AI Study Coach. Help students with study questions, concepts, and exam prep. Be concise, clear, and encouraging.`,
-
-  /* Tab 1 — Plan */
-  `You are an AI Study Planner. Have a friendly conversation to understand the student's exam, subjects, available time, and weak areas. Once you have enough detail, generate the plan by outputting a JSON array inside <plan>…</plan> tags.
-Each session object: { "name": string, "subject": string, "priority": "high"|"medium"|"low", "material": string, "start": "HH:MM", "end": "HH:MM", "breakMins": number }
-Rules: sessions sequential, 45–90 min each, breakMins 0–15, no time overlaps.`,
-];
-
-const GREETING = {
-  role: "assistant",
-  content: "Hi! I'm your AI Study Coach 📚\n\nI'll help you build a personalized study plan through a quick conversation. How would you like to start?",
-  buttons: [
-    { label: "📚 Overall Plan",    bg: "#16a34a" },
-    { label: "🎯 Specific Topics", bg: "#2563eb" },
-  ],
+// ── Small utilities ──────────────────────────────────────────────────────────
+const daysLeft = (examDate) => {
+  if (!examDate) return null;
+  const diff = (new Date(examDate) - new Date()) / 86400000;
+  return Math.max(0, Math.ceil(diff));
 };
 
-// ── Component ─────────────────────────────────────────────────────────────────
+const msgT = (lang, en, ta, hi) => (lang === "tamil" ? ta : lang === "hindi" ? hi : en);
+
+// ── Component ────────────────────────────────────────────────────────────────
 export default function AIPlanModal({ user, onClose, onCreated }) {
-  const { showToast } = useStore();
-  const [tab,    setTab]    = useState(0);
-  const [chats,  setChats]  = useState([[], [GREETING]]);
-  const [input,  setInput]  = useState("");
-  const [busy,   setBusy]   = useState(false);
+  const { showToast, settings } = useStore();
+  const language   = (settings?.language || "english").toLowerCase();
+  const examName   = (settings?.examName || "").trim() || "Unknown Exam";
+  const examDate   = settings?.examDate || "";
+
+  const [tab, setTab]       = useState(0);
+  const [qaChat, setQaChat] = useState([]);
+  const [planChat, setPlanChat] = useState([]);
+  const [input, setInput]   = useState("");
+  const [busy, setBusy]     = useState(false);
   const [tokens, setTokens] = useState(null);
-  const endRef  = useRef(null);
+  const [splash, setSplash] = useState(false);
+  const [stage, setStage]   = useState(null);
 
+  const planHistory   = useRef([]);
+  const qaHistory     = useRef([]);
+  const planStarted   = useRef(false);
+  const qaStarted     = useRef(false);
+  const planType      = useRef(null);
+  const specTopics    = useRef(null);
+  const waitingHours  = useRef(false);
+  const waitingTopics = useRef(false);
+  const studyHours    = useRef(null);
+  const studyTime     = useRef(null);
+  const endRef        = useRef(null);
+
+  // ── Initial data ──
   useEffect(() => { getUserTokens(user.uid).then(setTokens); }, [user.uid]);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chats, tab]);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [qaChat, planChat, tab, splash]);
 
-  const msgs = chats[tab];
+  // ── Auto-start tabs ──
+  useEffect(() => {
+    if (tab === 1 && !planStarted.current) { planStarted.current = true; autoStartPlan(); }
+    if (tab === 0 && !qaStarted.current)   { qaStarted.current = true;   autoStartQA(); }
+  }, [tab]);
 
-  async function send(text) {
-    const content = (text ?? input).trim();
-    if (!content || busy) return;
+  // ── UI helpers ──
+  const appendPlan = (role, content) => setPlanChat(p => [...p, { role, content }]);
+  const appendQA   = (role, content) => setQaChat(p => [...p, { role, content }]);
 
-    // Token gate — re-fetch for accuracy
+  // ── Q&A tab auto-start ──
+  function autoStartQA() {
+    const greeting = msgT(language,
+      "Hello! 👋 What can I help you with today? 😎🔥📚",
+      "Vanakkam! 👋 Ena doubt iruku? Kelu bro! 😎🔥📚",
+      "Namaste! 👋 Kya doubt hai? Pucho yaar! 😎🔥📚"
+    );
+    const systemPrompt =
+      `You are an AI study assistant. Help with exam tips, doubt clearing, and problem solving. ` +
+      `User is preparing for ${examName}. Speak in ${language}+English mix with emojis. ` +
+      `Be concise, helpful, and encouraging.\n\n` +
+      `IMPORTANT: Format all math in PLAIN TEXT using simple notation:\n` +
+      `- Use * for multiplication (5 * 3)\n` +
+      `- Use / for division (10 / 2)\n` +
+      `- Use ^ for powers (x^2)\n` +
+      `- Use sqrt() for square root (sqrt(25))\n` +
+      `- Show step-by-step calculations clearly\n` +
+      `- NEVER use LaTeX or special math symbols like \\text, \\frac, \\times\n` +
+      `- Write formulas in readable format: Speed = Distance / Time`;
+    qaHistory.current = [{ role: "system", content: systemPrompt }];
+    appendQA("assistant", greeting);
+  }
+
+  // ── Plan tab auto-start: kickoff AI-generated greeting then splash ──
+  async function autoStartPlan() {
+    appendPlan("assistant", "Please wait Setting things up… ⚡");
+    const dleft = daysLeft(examDate);
+    try {
+      // Live token check
+      const live = await getUserTokens(user.uid);
+      setTokens(live);
+
+      const systemPrompt =
+        `You are an AI study coach. Speak in ${language}+English mix with emojis. ` +
+        getLanguageSample(language);
+      const kickoff =
+        `SYLLABUS:\nExam: ${examName}\n\n` +
+        `PROFILE:\n${JSON.stringify({ examName, examDate, language, daysLeft: dleft })}\n` +
+        `Exam Date: ${examDate || "not set"}${dleft != null ? ` (${dleft} days left)` : ""}\n\n` +
+        `Speak in ${language}+English with emojis. Greet the student by name of exam "${examName}"` +
+        `${dleft != null ? ` and mention the ${dleft} days left to exam` : ""}. ` +
+        `DO NOT create plan yet. First chat with user, understand their needs, ` +
+        `then ask if they want to create a study plan.`;
+
+      planHistory.current = [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: kickoff },
+      ];
+      const reply = await callAI(
+        [...planHistory.current, { role: "system", content: getLanguageReminder(language) }],
+        "gpt-4o-mini", 0.7
+      );
+      planHistory.current.push({ role: "assistant", content: reply });
+      setPlanChat([{ role: "assistant", content: reply }]);
+      setTimeout(() => setSplash(true), 2500);
+    } catch (err) {
+      appendPlan("assistant", `Failed to start: ${err.message || err}`);
+    }
+  }
+
+  // ── Handle splash button clicks ──
+  function onOverall() {
+    planType.current = "overall";
+    setSplash(false);
+    const msg = msgT(language,
+      `👍 Overall plan for '${examName}'!\n\n⏰ How many hours? (eg: 4 hours 6am-10am)`,
+      `👍 '${examName}' ku overall plan!\n\n⏰ Evlo hours? (eg: 4 hours 6am-10am)`,
+      `👍 '${examName}' ke liye overall plan!\n\n⏰ Kitne hours? (eg: 4 hours 6am-10am)`
+    );
+    appendPlan("assistant", msg);
+    waitingHours.current = true;
+  }
+
+  function onSpecific() {
+    planType.current = "specific";
+    setSplash(false);
+    const msg = msgT(language,
+      "🎯 Specific topics! Which ones?\n\n(eg: Physics, Chemistry, General awarness, Current affairs.....)",
+      "🎯 Specific topics! Enna topics venum?\n\n(eg: Physics, Chemistry, General awarness, Current affairs.....)",
+      "🎯 Specific topics! Kaunse topics?\n\n(eg: Physics, Chemistry, General awarness, Current affairs.....)"
+    );
+    appendPlan("assistant", msg);
+    waitingTopics.current = true;
+  }
+
+  // ── Send message dispatcher ──
+  async function send(textArg) {
+    const text = (textArg ?? input).trim();
+    if (!text || busy) return;
+    setInput("");
+
+    if (tab === 0) return sendQA(text);
+    return sendPlan(text);
+  }
+
+  // ── Q&A tab send ──
+  async function sendQA(text) {
     const live = await getUserTokens(user.uid);
     setTokens(live);
     if (live <= 0) { showToast("No AI tokens remaining"); return; }
 
-    setInput("");
-    const userMsg = { role: "user", content };
-
-    // Clear quick-reply buttons from previous messages, append user + empty AI bubble
-    setChats(prev => {
-      const next = [...prev];
-      next[tab]  = [...prev[tab].map(m => ({ ...m, buttons: undefined })), userMsg, { role: "assistant", content: "", streaming: true }];
-      return next;
-    });
-
+    appendQA("user", text);
+    qaHistory.current.push({ role: "user", content: text });
     setBusy(true);
     let full = "";
-
-    // Build clean history for API (strip UI-only fields)
-    const history = msgs
-      .map(m => ({ role: m.role, content: m.content }))
-      .filter(m => m.content);
-
+    appendQA("assistant", "");
     try {
       await callAIStream(
-        [{ role: "system", content: SYSTEMS[tab] }, ...history, userMsg],
+        qaHistory.current,
         "gpt-4o-mini",
-
-        // onChunk — append delta to last bubble
         chunk => {
           full += chunk;
-          setChats(prev => {
-            const next = [...prev];
-            const msgs = [...prev[tab]];
-            msgs[msgs.length - 1] = { role: "assistant", content: full, streaming: true };
-            next[tab] = msgs;
-            return next;
-          });
+          setQaChat(p => { const n = [...p]; n[n.length - 1] = { role: "assistant", content: full, streaming: true }; return n; });
         },
-
-        // onDone — finalise bubble; extract plan if Tab 1
-        async () => {
-          setChats(prev => {
-            const next = [...prev];
-            const msgs = [...prev[tab]];
-            msgs[msgs.length - 1] = { role: "assistant", content: full };
-            next[tab] = msgs;
-            return next;
-          });
-
-          if (tab === 1) {
-            const match = full.match(/<plan>([\s\S]*?)<\/plan>/);
-            if (match) {
-              try {
-                const sessions = JSON.parse(match[1].trim());
-                if (Array.isArray(sessions) && sessions.length > 0) {
-                  await Promise.all(sessions.map(s => savePlan(user.uid, { ...s, createdAt: Date.now() })));
-                  await decrementUserTokens(user.uid);
-                  setTokens(t => Math.max(0, (t ?? 1) - 1));
-                  onCreated(sessions.length);   // toast + close in parent
-                }
-              } catch {
-                showToast("Could not read plan — ask AI to regenerate it");
-              }
-            }
-          }
+        () => {
+          setQaChat(p => { const n = [...p]; n[n.length - 1] = { role: "assistant", content: full }; return n; });
+          qaHistory.current.push({ role: "assistant", content: full });
           setBusy(false);
         }
       );
     } catch (err) {
-      setChats(prev => {
-        const next = [...prev];
-        const msgs = [...prev[tab]];
-        msgs[msgs.length - 1] = { role: "assistant", content: "Something went wrong. Please try again." };
-        next[tab] = msgs;
-        return next;
-      });
-      showToast(err.message || "AI error");
+      setQaChat(p => { const n = [...p]; n[n.length - 1] = { role: "assistant", content: "Something went wrong." }; return n; });
+      showToast(err.message || "AI error"); setBusy(false);
+    }
+  }
+
+  // ── Plan tab send — handles flow states ──
+  async function sendPlan(text) {
+    appendPlan("user", text);
+
+    if (waitingTopics.current) {
+      specTopics.current = text;
+      waitingTopics.current = false;
+      const msg = msgT(language,
+        `👍 Perfect! I'll create a plan for: '${text}'!\n\n⏰ How many hours can you study and what time?\n\nExample: 4 hours 6am to 10am`,
+        `👍 Seri bro! '${text}' ku plan create panren!\n\n⏰ Evlo hours padika mudiyum and enna time la?\n\nExample: 4 hours 6am to 10am`,
+        `👍 Thik hai! '${text}' ke liye plan banaunga!\n\n⏰ Kitne hours aur kab?\n\nExample: 4 hours 6am to 10am`
+      );
+      appendPlan("assistant", msg);
+      waitingHours.current = true;
+      return;
+    }
+
+    if (waitingHours.current) {
+      appendPlan("assistant", msgT(language, "Processing... ⚡", "Wait pannu... ⚡", "Thodi der... ⚡"));
+      setBusy(true);
+      const { hours, timing } = await parseStudyInfo(text);
+      if (hours && timing) {
+        waitingHours.current = false;
+        studyHours.current = hours; studyTime.current = timing;
+        appendPlan("assistant", `✅ ${hours}h, ${timing}! Creating...`);
+        await generatePlan();
+      } else if (hours && !timing) {
+        waitingHours.current = false;
+        studyHours.current = hours; studyTime.current = "06:00-22:00";
+        appendPlan("assistant", `✅ ${hours} hours! Using flexible timing. Creating...`);
+        await generatePlan();
+      } else {
+        setBusy(false);
+        appendPlan("assistant", msgT(language,
+          "🤔 I couldn't understand the time format. Try like:\n• 4 hours 6am to 10am\n• 6 to 10 morning\n• 3 hours evening\n• Just '4 hours' also works!\n\nTell me! 😊",
+          "🤔 Time format puriyala bro... Ipdi try pannu:\n• 4 hours 6am to 10am\n• 6 to 10 morning\n• 3 hours evening\n• Just '4 hours' also works!\n\nSollu! 😊",
+          "🤔 Time format samajh nahi aaya... Aise try karo:\n• 4 hours 6am to 10am\n• 6 to 10 morning\n• 3 hours evening\n• Sirf '4 hours' bhi chalega!\n\nBatao! 😊"
+        ));
+      }
+      return;
+    }
+
+    // Free-form conversation with AI
+    const live = await getUserTokens(user.uid);
+    setTokens(live);
+    if (live <= 0) { showToast("No AI tokens remaining"); return; }
+
+    planHistory.current.push({ role: "user", content: text });
+    setBusy(true);
+    let full = "";
+    appendPlan("assistant", "");
+    try {
+      await callAIStream(
+        [...planHistory.current, { role: "system", content: getLanguageReminder(language) }],
+        "gpt-4o-mini",
+        chunk => {
+          full += chunk;
+          setPlanChat(p => { const n = [...p]; n[n.length - 1] = { role: "assistant", content: full, streaming: true }; return n; });
+        },
+        () => {
+          setPlanChat(p => { const n = [...p]; n[n.length - 1] = { role: "assistant", content: full }; return n; });
+          planHistory.current.push({ role: "assistant", content: full });
+          setBusy(false);
+        }
+      );
+    } catch (err) {
+      setPlanChat(p => { const n = [...p]; n[n.length - 1] = { role: "assistant", content: "Something went wrong." }; return n; });
+      showToast(err.message || "AI error"); setBusy(false);
+    }
+  }
+
+  // ── Two-stage plan generation ──
+  async function generatePlan() {
+    setBusy(true);
+    appendPlan("assistant", msgT(language,
+      "Perfect! 📅 Analyzing PYQ patterns... ⚡",
+      "Perfect bro! 📅 PYQ patterns analyze pandren... ⚡",
+      "Perfect! 📅 PYQ patterns analyze kar raha hoon... ⚡"
+    ));
+    try {
+      setStage(1);
+      appendPlan("assistant", msgT(language,
+        "🧠 Stage 1: Analyzing exam pattern...",
+        "🧠 Stage 1: Exam pattern analyze pandren...",
+        "🧠 Stage 1: Exam pattern analyze kar raha..."
+      ));
+      const analysis = await stage1AnalyzeExam(examName, planType.current, specTopics.current);
+      if (!analysis) { appendPlan("assistant", "⚠️ Failed to analyze exam."); setBusy(false); return; }
+
+      setStage(2);
+      appendPlan("assistant", msgT(language,
+        "📊 Stage 2: Creating complete structure...",
+        "📊 Stage 2: Complete structure create pandren...",
+        "📊 Stage 2: Complete structure bana raha..."
+      ));
+      const data = await stage2ParseAnalysis(analysis, studyHours.current, studyTime.current);
+      if (!data) { appendPlan("assistant", "⚠️ Could not create structure. Please try again."); setBusy(false); return; }
+
+      let plans = convertToPlansFormat(data);
+      if (!plans) { appendPlan("assistant", "⚠️ Could not convert format."); setBusy(false); return; }
+
+      plans = applyConstraints(plans, studyHours.current);
+      plans = addRevisionSessions(plans);
+
+      const records = plansToFirebaseSessions(plans);
+      await Promise.all(records.map(r => savePlan(user.uid, { ...r, createdAt: Date.now() })));
+      await decrementUserTokens(user.uid);
+      setTokens(t => Math.max(0, (t ?? 1) - 1));
+
+      const summary = [`✅ ${Object.keys(plans).length} plans created!\n`];
+      for (const entry of Object.values(plans)) {
+        const highCount = entry.sessions.filter(s => s[4] === "High").length;
+        summary.push(`• ${entry.displayName}: ${entry.sessions.length} sessions (${highCount} High priority)`);
+      }
+      appendPlan("assistant", summary.join("\n"));
+      setStage(null);
       setBusy(false);
+      onCreated(records.length);
+    } catch (err) {
+      setStage(null); setBusy(false);
+      appendPlan("assistant", `⚠️ Error: ${err.message || err}\n\nPlease try again.`);
     }
   }
 
   const noTokens = tokens !== null && tokens <= 0;
+  const msgs = tab === 0 ? qaChat : planChat;
 
   return (
     <div style={S.wrap}>
-
-      {/* ── Header ── */}
       <div style={S.header}>
         <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 700, fontSize: 16, color: "white", marginBottom: 10 }}>
-            🤖 AI Study Coach
-          </div>
+          <div style={{ fontWeight: 700, fontSize: 16, color: "white", marginBottom: 10 }}>🤖 AI Study Coach</div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {["💡 Ask Questions & Problem Solving", "📅 Study Plan Creation"].map((label, i) => (
-              <button
-                key={i} onClick={() => !busy && setTab(i)}
-                style={{ ...S.tabBtn, background: tab === i ? "white" : "rgba(255,255,255,0.18)", color: tab === i ? "var(--accent)" : "white" }}
-              >{label}</button>
+              <button key={i} onClick={() => !busy && setTab(i)}
+                style={{ ...S.tabBtn, background: tab === i ? "white" : "rgba(255,255,255,0.18)", color: tab === i ? "var(--accent)" : "white" }}>
+                {label}
+              </button>
             ))}
           </div>
         </div>
         <button onClick={onClose} style={S.closeBtn}>✕</button>
       </div>
 
-      {/* ── Token strip ── */}
       {tokens !== null && (
         <div style={{ ...S.tokenStrip, background: noTokens ? "#fde8e8" : "var(--bg)", color: noTokens ? "#c0392b" : "var(--ink2)" }}>
-          {noTokens
-            ? "❌ No AI tokens remaining"
-            : `🪙 ${tokens} AI generation${tokens !== 1 ? "s" : ""} remaining`}
+          {noTokens ? "❌ No AI tokens remaining" : `🪙 ${tokens} AI generation${tokens !== 1 ? "s" : ""} remaining`}
         </div>
       )}
 
-      {/* ── Messages ── */}
       <div style={S.msgs}>
         {msgs.map((m, i) => {
           const isUser = m.role === "user";
           return (
             <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: isUser ? "flex-end" : "flex-start", marginBottom: 10 }}>
-              {!isUser && (
-                <span style={{ fontSize: 11, color: "var(--ink2)", marginBottom: 3, marginLeft: 4 }}>AI Coach</span>
-              )}
+              {!isUser && <span style={{ fontSize: 11, color: "var(--ink2)", marginBottom: 3, marginLeft: 4 }}>AI Coach</span>}
               <div style={{ ...S.bubble, ...(isUser ? S.bubbleUser : S.bubbleAI) }}>
-                {m.content}
-                {m.streaming && <span style={{ opacity: 0.45 }}>▋</span>}
+                {m.content}{m.streaming && <span style={{ opacity: 0.45 }}>▋</span>}
               </div>
-              {m.buttons && (
-                <div style={{ display: "flex", gap: 8, marginTop: 8, marginLeft: 4, flexWrap: "wrap" }}>
-                  {m.buttons.map(b => (
-                    <button key={b.label} onClick={() => send(b.label)} style={{ ...S.qrBtn, background: b.bg }}>
-                      {b.label}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
           );
         })}
+
+        {tab === 1 && splash && (
+          <div style={S.splash}>
+            <div style={{ fontWeight: 600, marginBottom: 10, color: "var(--ink)" }}>
+              {msgT(language, "📋 Select plan type:", "📋 Plan type select pannu:", "📋 Plan type select karo:")}
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button onClick={onOverall} style={{ ...S.qrBtn, background: "#16a34a" }}>
+                📚 Overall ({examName.length > 15 ? examName.slice(0, 15) + ".." : examName})
+              </button>
+              <button onClick={onSpecific} style={{ ...S.qrBtn, background: "#2563eb" }}>🎯 Specific Topics</button>
+            </div>
+          </div>
+        )}
+
+        {stage && (
+          <div style={{ padding: 10, fontSize: 12, color: "var(--ink2)" }}>
+            Generating plan — Stage {stage} of 2…
+          </div>
+        )}
+
         <div ref={endRef} />
       </div>
 
-      {/* ── Input bar ── */}
       <div style={S.bar}>
         <input
           value={input}
@@ -194,18 +380,13 @@ export default function AIPlanModal({ user, onClose, onCreated }) {
           disabled={busy || noTokens}
           style={S.inp}
         />
-        <button
-          onClick={() => send()}
-          disabled={busy || !input.trim() || noTokens}
-          style={{ ...S.sendBtn, opacity: busy || !input.trim() || noTokens ? 0.4 : 1 }}
-        >➤</button>
+        <button onClick={() => send()} disabled={busy || !input.trim() || noTokens}
+          style={{ ...S.sendBtn, opacity: busy || !input.trim() || noTokens ? 0.4 : 1 }}>➤</button>
       </div>
-
     </div>
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
 const S = {
   wrap:       { position: "fixed", inset: 0, zIndex: 9999, display: "flex", flexDirection: "column", background: "var(--bg)" },
   header:     { background: "var(--nav-bg)", padding: "16px 20px", display: "flex", alignItems: "flex-start", gap: 12, flexShrink: 0 },
@@ -220,4 +401,5 @@ const S = {
   bar:        { display: "flex", gap: 10, padding: "12px 16px", background: "var(--surface)", borderTop: "1px solid var(--border)", flexShrink: 0 },
   inp:        { flex: 1, padding: "10px 16px", borderRadius: 24, border: "1.5px solid var(--border)", fontSize: 14, background: "var(--bg)", color: "var(--ink)", fontFamily: "inherit", outline: "none" },
   sendBtn:    { background: "var(--accent)", color: "white", border: "none", borderRadius: "50%", width: 42, height: 42, fontSize: 16, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  splash:     { alignSelf: "center", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 18px", margin: "12px 0", boxShadow: "0 4px 12px rgba(0,0,0,.08)" },
 };
