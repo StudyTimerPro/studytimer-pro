@@ -5,6 +5,7 @@ import {
   getExams, getPlans, deleteExam, deletePlanFromExam, renamePlan,
   exportExam, exportPlan, importExam, importPlan, createEmptyPlan,
 } from "../../firebase/db";
+import ShareToGroupModal from "./ShareToGroupModal";
 
 export default function ExamPlanSelector({ onAddExam, onAddSession, onAddPlan }) {
   const { user } = useAuth();
@@ -13,20 +14,17 @@ export default function ExamPlanSelector({ onAddExam, onAddSession, onAddPlan })
     plans, setPlans, currentPlanId, setCurrentPlanId, setCurrentPlanName,
     showToast,
   } = useStore();
-  const [examOpen, setExamOpen] = useState(false);
-  const [planOpen, setPlanOpen] = useState(false);
-  const [menuFor, setMenuFor] = useState(null); // { kind: "exam"|"plan", id }
+  const [examOpen,   setExamOpen]   = useState(false);
+  const [planOpen,   setPlanOpen]   = useState(false);
+  const [menuFor,    setMenuFor]    = useState(null);
+  const [sharePlan,  setSharePlan]  = useState(null);
   const examImportRef = useRef(null);
   const planImportRef = useRef(null);
 
   useEffect(() => {
-    function closeOnClick(e) {
-      if (!e.target.closest("[data-dropdown]")) {
-        setExamOpen(false); setPlanOpen(false); setMenuFor(null);
-      }
-    }
-    document.addEventListener("click", closeOnClick);
-    return () => document.removeEventListener("click", closeOnClick);
+    const close = e => { if (!e.target.closest("[data-dropdown]")) { setExamOpen(false); setPlanOpen(false); setMenuFor(null); } };
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
   }, []);
 
   async function switchExam(exam) {
@@ -47,9 +45,7 @@ export default function ExamPlanSelector({ onAddExam, onAddSession, onAddPlan })
   }
 
   function arrowNav(dir) {
-    if (!plans.length) return;
-    const idx = plans.findIndex(p => p.id === currentPlanId);
-    const next = plans[(idx + dir + plans.length) % plans.length];
+    const next = plans[(plans.findIndex(p => p.id === currentPlanId) + dir + plans.length) % plans.length];
     if (next) { setCurrentPlanId(next.id); setCurrentPlanName(next.name); }
   }
 
@@ -138,10 +134,8 @@ export default function ExamPlanSelector({ onAddExam, onAddSession, onAddPlan })
 
   return (
     <div style={S.wrap}>
-      <input ref={examImportRef} type="file" accept="application/json" style={{ display: "none" }}
-        onChange={e => { const f = e.target.files?.[0]; if (f) handleImportExamFile(f); e.target.value = ""; }} />
-      <input ref={planImportRef} type="file" accept="application/json" style={{ display: "none" }}
-        onChange={e => { const f = e.target.files?.[0]; if (f) handleImportPlanFile(f); e.target.value = ""; }} />
+      <input ref={examImportRef} type="file" accept="application/json" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) handleImportExamFile(f); e.target.value = ""; }} />
+      <input ref={planImportRef} type="file" accept="application/json" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) handleImportPlanFile(f); e.target.value = ""; }} />
 
       {/* Left: Exam dropdown */}
       <div data-dropdown style={{ position: "relative", flex: 1, minWidth: 0 }}>
@@ -197,6 +191,7 @@ export default function ExamPlanSelector({ onAddExam, onAddSession, onAddPlan })
                     <button style={S.submenuItem} onClick={() => handleExportPlanMenu(p)}>Export Plan</button>
                     <button style={S.submenuItem} onClick={() => { planImportRef.current?.click(); setMenuFor(null); }}>Import Plan</button>
                     <button style={S.submenuItem} onClick={() => handleRenamePlan(p)}>Rename Plan</button>
+                    <button style={S.submenuItem} onClick={() => { setMenuFor(null); setSharePlan(p); }}>📤 Share to Group</button>
                     <button style={{ ...S.submenuItem, color: "#c0392b" }} onClick={() => handleDeletePlan(p)}>Delete Plan</button>
                   </div>
                 )}
@@ -220,16 +215,22 @@ export default function ExamPlanSelector({ onAddExam, onAddSession, onAddPlan })
       <button style={{ ...S.iconBtn, color: "#c0392b" }}
         onClick={() => { const p = plans.find(pp => pp.id === currentPlanId); if (p) handleDeletePlan(p); }}
         disabled={!currentPlanId} title="Delete current plan">🗑</button>
+
+      {sharePlan && (
+        <ShareToGroupModal
+          planId={sharePlan.id} planName={sharePlan.name}
+          examId={currentExamId} user={user}
+          onClose={() => setSharePlan(null)} showToast={showToast}
+        />
+      )}
     </div>
   );
 }
 
 function safeName(s) { return String(s || "export").replace(/[^a-z0-9-_]+/gi, "_").slice(0, 40); }
 function downloadJson(obj, filename) {
-  const url = URL.createObjectURL(new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" }));
-  const a = document.createElement("a");
-  a.href = url; a.download = filename; a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 500);
+  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" })), download: filename });
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 500);
 }
 
 const S = {

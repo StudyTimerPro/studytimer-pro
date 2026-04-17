@@ -1,17 +1,35 @@
 import React, { useEffect, useState } from "react";
+import { useAuth } from "../../hooks/useAuth";
+import useStore from "../../store/useStore";
 import { loadMemberPlans } from "../../firebase/groupsDb";
+import { savePlanToExam } from "../../firebase/db";
 
 export default function GroupPlans({ members, groupId }) {
+  const { user }                   = useAuth();
+  const { currentExamId, showToast } = useStore();
   const [plans,   setPlans]   = useState([]);
   const [loading, setLoading] = useState(true);
+  const [adding,  setAdding]  = useState(null);
 
   useEffect(() => {
     setLoading(true);
     loadMemberPlans(members).then(setPlans).catch(() => {}).finally(() => setLoading(false));
   }, [groupId]);
 
+  async function handleAdd(memberName, sessions) {
+    if (!currentExamId)    { showToast("Select an exam in Today's Plan first"); return; }
+    if (!sessions.length)  { showToast("No sessions to copy"); return; }
+    setAdding(memberName);
+    try {
+      const clean = sessions.map(({ id, ...rest }) => rest);
+      await savePlanToExam(user.uid, currentExamId, `${memberName}'s Plan`, clean);
+      showToast(`Added "${memberName}'s Plan" ✓`);
+    } catch { showToast("Failed to add plan"); }
+    finally { setAdding(null); }
+  }
+
   if (loading) return <p style={{ color: "var(--ink2)", padding: 8, fontSize: 13 }}>Loading plans...</p>;
-  if (plans.length === 0) return <p style={{ color: "var(--ink2)", padding: 8, fontSize: 13 }}>No members found.</p>;
+  if (!plans.length) return <p style={{ color: "var(--ink2)", padding: 8, fontSize: 13 }}>No members found.</p>;
 
   return (
     <div>
@@ -20,17 +38,21 @@ export default function GroupPlans({ members, groupId }) {
         const sorted = sessions.slice().sort((a, b) => (a.start || "").localeCompare(b.start || ""));
         return (
           <div key={uid} style={{ background: "var(--surface)", borderRadius: 10, padding: "14px 16px", marginBottom: 12, border: "1px solid var(--border)", boxShadow: "0 1px 6px rgba(0,0,0,.05)" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: sessions.length > 0 ? 10 : 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: sessions.length ? 10 : 0 }}>
               {photo
                 ? <img src={photo} alt="" style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover" }} />
                 : <div style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>👤</div>}
               <span style={{ fontWeight: 600, fontSize: 14, color: "var(--ink)", flex: 1 }}>{name}</span>
-              <span style={{ fontSize: 12, color: "var(--ink2)" }}>
-                {sessions.length} session{sessions.length !== 1 ? "s" : ""}
-              </span>
+              <span style={{ fontSize: 12, color: "var(--ink2)" }}>{sessions.length} session{sessions.length !== 1 ? "s" : ""}</span>
+              <button
+                onClick={() => handleAdd(name, sessions)}
+                disabled={adding === name || !sessions.length}
+                style={{ background: adding === name ? "var(--border)" : "#eaf0fb", color: "#2563eb", border: "none", borderRadius: 7, padding: "5px 10px", fontSize: 12, fontWeight: 600, cursor: (sessions.length && adding !== name) ? "pointer" : "not-allowed", whiteSpace: "nowrap" }}>
+                {adding === name ? "Adding…" : "➕ Add to My Plans"}
+              </button>
             </div>
 
-            {sessions.length === 0 ? (
+            {!sessions.length ? (
               <p style={{ fontSize: 12, color: "var(--ink2)", margin: 0 }}>No sessions planned today.</p>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>

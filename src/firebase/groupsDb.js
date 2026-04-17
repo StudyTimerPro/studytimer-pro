@@ -1,5 +1,5 @@
 import { db } from "./config";
-import { ref, set, get, push, update, remove, onValue, off } from "firebase/database";
+import { ref, set, get, push, update, remove, onValue, off, onDisconnect } from "firebase/database";
 
 function makeCode() {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
@@ -75,6 +75,26 @@ export async function loadMemberPlans(members) {
   );
 }
 
+// ── Member weekly study hours ────────────────────────────────
+export async function loadMemberWeeklyHours(uids) {
+  const dates = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(Date.now() - i * 86400000);
+    return d.toISOString().split("T")[0];
+  });
+  const results = {};
+  await Promise.all(uids.map(async uid => {
+    let mins = 0;
+    await Promise.all(dates.map(async date => {
+      const snap = await get(ref(db, `wastage/${uid}/${date}`));
+      if (snap.exists()) {
+        Object.values(snap.val()).forEach(s => { if (!s.missed) mins += (s.duration || 0); });
+      }
+    }));
+    results[uid] = Math.round(mins / 60 * 10) / 10;
+  }));
+  return results;
+}
+
 // ── Real-time: online presence ───────────────────────────────
 export function listenOnlineMembers(gid, cb) {
   const r = ref(db, `groups/${gid}/members`);
@@ -86,8 +106,25 @@ export function listenOnlineMembers(gid, cb) {
   return () => off(r);
 }
 
-export function setOnlineStatus(uid, gid, isOnline) {
-  return update(ref(db, `groups/${gid}/members/${uid}`), { online: isOnline });
+export async function setupPresence(uid, gid) {
+  const presenceRef = ref(db, `groups/${gid}/members/${uid}`);
+  const disc = onDisconnect(presenceRef);
+  await disc.update({ online: false });
+  await update(presenceRef, { online: true });
+  return async () => {
+    await disc.cancel();
+    await update(presenceRef, { online: false });
+  };
+}
+
+// ── Share a plan to a group ──────────────────────────────────
+export async function shareGroupPlan(uid, userName, groupId, { name, sessions }) {
+  const snap = await get(ref(db, `groups/${groupId}/members/${uid}`));
+  const role = snap.exists() ? snap.val().role : "member";
+  const status = role === "admin" ? "approved" : "pending";
+  const planRef = push(ref(db, `groups/${groupId}/plans`));
+  await set(planRef, { name, sessions, sharedBy: uid, sharedByName: userName, status, sharedAt: Date.now() });
+  return status;
 }
 
 // ── Real-time: chat ──────────────────────────────────────────

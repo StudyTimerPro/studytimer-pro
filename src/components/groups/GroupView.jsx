@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { listenOnlineMembers, listenChat, setOnlineStatus, updateGroup, leaveGroup, notifyAll } from "../../firebase/groupsDb";
+import { listenOnlineMembers, listenChat, setupPresence, updateGroup, leaveGroup, notifyAll } from "../../firebase/groupsDb";
 import GroupPlans   from "./GroupPlans";
 import GroupMembers from "./GroupMembers";
 import GroupChat    from "./GroupChat";
@@ -19,9 +19,10 @@ export default function GroupView({ group, user, showToast, onGroupUpdated, onLe
   const memberCount = Object.keys(members).length;
 
   useEffect(() => {
-    setOnlineStatus(user.uid, group.id, true);
+    let cancelPresence;
+    setupPresence(user.uid, group.id).then(fn => { cancelPresence = fn; });
     const unsub = listenOnlineMembers(group.id, setOnlineUids);
-    return () => { setOnlineStatus(user.uid, group.id, false); unsub(); };
+    return () => { cancelPresence?.(); unsub(); };
   }, [group.id, user.uid]);
 
   useEffect(() => {

@@ -1,7 +1,24 @@
-import React from "react";
-import { kickMember, promoteMember } from "../../firebase/groupsDb";
+import React, { useEffect, useState } from "react";
+import { kickMember, promoteMember, loadMemberWeeklyHours } from "../../firebase/groupsDb";
+
+const GRID_CSS = `
+.gm-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+@media (max-width: 640px) {
+  .gm-grid { grid-template-columns: repeat(3, 1fr); }
+}
+`;
 
 export default function GroupMembers({ members, onlineUids, user, group, isAdmin, showToast, onGroupUpdated }) {
+  const [weeklyHours, setWeeklyHours] = useState({});
+
+  useEffect(() => {
+    loadMemberWeeklyHours(Object.keys(members)).then(setWeeklyHours).catch(() => {});
+  }, [group.id]);
+
   const sorted = Object.entries(members).sort(([, a], [, b]) => {
     if (a.role === "admin" && b.role !== "admin") return -1;
     if (b.role === "admin" && a.role !== "admin") return 1;
@@ -12,9 +29,9 @@ export default function GroupMembers({ members, onlineUids, user, group, isAdmin
     if (!confirm(`Remove ${name} from the group?`)) return;
     try {
       await kickMember(uid, group.id);
-      const newMembers = { ...members };
-      delete newMembers[uid];
-      onGroupUpdated({ id: group.id, members: newMembers });
+      const next = { ...members };
+      delete next[uid];
+      onGroupUpdated({ id: group.id, members: next });
       showToast(`${name} removed`);
     } catch { showToast("Failed to remove member"); }
   }
@@ -29,52 +46,79 @@ export default function GroupMembers({ members, onlineUids, user, group, isAdmin
   }
 
   return (
-    <div>
+    <>
+      <style>{GRID_CSS}</style>
       <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 14, color: "var(--ink)" }}>
         Members ({sorted.length})
       </h3>
-      {sorted.map(([uid, m]) => {
-        const isOnline = onlineUids.has(uid);
-        const isMe     = uid === user.uid;
-        return (
-          <div key={uid} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: "var(--surface)", borderRadius: 10, marginBottom: 8, border: "1px solid var(--border)" }}>
-            <div style={{ position: "relative", flexShrink: 0 }}>
-              {m.photo
-                ? <img src={m.photo} alt="" style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover" }} />
-                : <div style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15 }}>👤</div>}
-              <div style={{ position: "absolute", bottom: 0, right: 0, width: 11, height: 11, borderRadius: "50%", background: isOnline ? "#27ae60" : "var(--border)", border: "2px solid var(--surface)" }} />
-            </div>
+      <div className="gm-grid">
+        {sorted.map(([uid, m]) => (
+          <MemberCard
+            key={uid}
+            uid={uid}
+            m={m}
+            isOnline={onlineUids.has(uid)}
+            isMe={uid === user.uid}
+            showAdminActions={isAdmin && uid !== user.uid && m.role !== "admin"}
+            hrs={weeklyHours[uid]}
+            onKick={handleKick}
+            onPromote={handlePromote}
+          />
+        ))}
+      </div>
+    </>
+  );
+}
 
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 600, fontSize: 14, color: "var(--ink)" }}>
-                {m.name}
-                {isMe && <span style={{ color: "var(--ink2)", fontWeight: 400, fontSize: 12 }}> (you)</span>}
-              </div>
-              <div style={{ fontSize: 12, color: isOnline ? "#27ae60" : "var(--ink2)", marginTop: 1 }}>
-                {isOnline ? "🟢 Online" : "⚫ Offline"}
-              </div>
-            </div>
-
-            {m.role === "admin" && (
-              <span style={{ fontSize: 10, fontWeight: 700, background: "#fff3e0", color: "#e67e22", padding: "3px 8px", borderRadius: 20, whiteSpace: "nowrap" }}>
-                ADMIN
-              </span>
-            )}
-
-            {isAdmin && !isMe && m.role !== "admin" && (
-              <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                <button onClick={() => handlePromote(uid, m.name)} style={smBtn("#eaf0fb","#2563eb")}>Promote</button>
-                <button onClick={() => handleKick(uid, m.name)}    style={smBtn("#fde8e8","#e63946")}>Remove</button>
-              </div>
-            )}
+function MemberCard({ uid, m, isOnline, isMe, showAdminActions, hrs, onKick, onPromote }) {
+  return (
+    <div style={{
+      background: "var(--surface)", borderRadius: 14, border: "1px solid var(--border)",
+      padding: "16px 10px 12px", display: "flex", flexDirection: "column",
+      alignItems: "center", gap: 6, textAlign: "center",
+    }}>
+      <div style={{ position: "relative", marginTop: 6 }}>
+        {m.photo
+          ? <img src={m.photo} alt="" style={{ width: 60, height: 60, borderRadius: "50%", objectFit: "cover" }} />
+          : <div style={{ width: 60, height: 60, borderRadius: "50%", background: "var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}>👤</div>
+        }
+        <div style={{
+          position: "absolute", bottom: 2, right: 2,
+          width: 13, height: 13, borderRadius: "50%",
+          background: isOnline ? "#22c55e" : "var(--border)",
+          border: "2.5px solid var(--surface)",
+        }} />
+        {m.role === "admin" && (
+          <div style={{ position: "absolute", top: -10, left: "50%", transform: "translateX(-50%)", fontSize: 14 }}>
+            👑
           </div>
-        );
-      })}
+        )}
+      </div>
+
+      <div style={{ fontWeight: 600, fontSize: 13, color: "var(--ink)", lineHeight: 1.3, wordBreak: "break-word", width: "100%" }}>
+        {m.name}
+        {isMe && <span style={{ display: "block", fontSize: 11, color: "var(--ink2)", fontWeight: 400 }}>you</span>}
+      </div>
+
+      <div style={{ fontSize: 11, color: isOnline ? "#22c55e" : "var(--ink2)" }}>
+        {isOnline ? "● Online" : "○ Offline"}
+      </div>
+
+      <div style={{ fontSize: 11, color: "var(--ink2)" }}>
+        {hrs !== undefined ? `${hrs}h this week` : "—"}
+      </div>
+
+      {showAdminActions && (
+        <div style={{ display: "flex", gap: 5, marginTop: 4 }}>
+          <button onClick={() => onPromote(uid, m.name)} title="Promote to admin" style={smBtn("#eaf0fb", "#2563eb")}>↑</button>
+          <button onClick={() => onKick(uid, m.name)}    title="Remove member"    style={smBtn("#fde8e8", "#e63946")}>✕</button>
+        </div>
+      )}
     </div>
   );
 }
 
 const smBtn = (bg, color) => ({
   background: bg, color, border: "none", borderRadius: 6,
-  padding: "5px 10px", fontSize: 11, fontWeight: 600, cursor: "pointer",
+  padding: "4px 9px", fontSize: 12, fontWeight: 700, cursor: "pointer",
 });
