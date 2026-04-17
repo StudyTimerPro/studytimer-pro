@@ -1,22 +1,30 @@
 import React, { useEffect, useState } from "react";
-import { listenOnlineMembers, listenChat, setupPresence, updateGroup, leaveGroup, notifyAll } from "../../firebase/groupsDb";
-import GroupPlans   from "./GroupPlans";
-import GroupMembers from "./GroupMembers";
-import GroupChat    from "./GroupChat";
+import { listenOnlineMembers, listenChat, setupPresence, updateGroup, leaveGroup, notifyAll, listenJoinRequests, listenGroupPlans } from "../../firebase/groupsDb";
+import { listenLibraryItems } from "../../firebase/groupsLibrary";
+import GroupPlans          from "./GroupPlans";
+import GroupMembers        from "./GroupMembers";
+import GroupChat           from "./GroupChat";
+import GroupLibrary        from "./GroupLibrary";
+import GroupNotifications  from "./GroupNotifications";
 
 const BANNERS = ["#2d6a4f","#2563eb","#7c3aed","#dc2626","#d97706","#0891b2","#1a1814","#db2777"];
 
 export default function GroupView({ group, user, showToast, onGroupUpdated, onLeave, onRefresh }) {
-  const [tab,        setTab]        = useState("members");
-  const [onlineUids, setOnlineUids] = useState(new Set());
-  const [messages,   setMessages]   = useState([]);
-  const [editOpen,   setEditOpen]   = useState(false);
-  const [editForm,   setEditForm]   = useState({});
-  const [busy,       setBusy]       = useState(false);
+  const [tab,          setTab]          = useState("members");
+  const [onlineUids,   setOnlineUids]   = useState(new Set());
+  const [messages,     setMessages]     = useState([]);
+  const [editOpen,     setEditOpen]     = useState(false);
+  const [editForm,     setEditForm]     = useState({});
+  const [busy,         setBusy]         = useState(false);
+  const [showNotif,    setShowNotif]    = useState(false);
+  const [pendingJoin,  setPendingJoin]  = useState([]);
+  const [pendingLib,   setPendingLib]   = useState([]);
+  const [pendingPlans, setPendingPlans] = useState([]);
 
   const isAdmin     = group.members?.[user.uid]?.role === "admin";
   const members     = group.members || {};
   const memberCount = Object.keys(members).length;
+  const notifCount  = pendingJoin.length + pendingLib.length + pendingPlans.length;
 
   useEffect(() => {
     let cancelPresence;
@@ -30,6 +38,14 @@ export default function GroupView({ group, user, showToast, onGroupUpdated, onLe
     const unsub = listenChat(group.id, setMessages);
     return () => unsub();
   }, [tab, group.id]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const u1 = listenJoinRequests(group.id, setPendingJoin);
+    const u2 = listenGroupPlans(group.id, plans => setPendingPlans(plans.filter(p => !p.approved)));
+    const u3 = listenLibraryItems(group.id, items => setPendingLib(items.filter(i => !i.approved)));
+    return () => { u1(); u2(); u3(); };
+  }, [group.id, isAdmin]);
 
   async function handleSaveEdit() {
     if (!editForm.name?.trim()) { showToast("Name required"); return; }
@@ -60,6 +76,9 @@ export default function GroupView({ group, user, showToast, onGroupUpdated, onLe
       .catch(() => showToast(`Invite code: ${code}`));
   }
 
+  const TABS = ["members", "plans", "library", "chat"];
+  const TAB_LABELS = { members: "👤 Members", plans: "📅 Plans", library: "📚 Library", chat: "💬 Chat" };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden" }}>
 
@@ -74,7 +93,13 @@ export default function GroupView({ group, user, showToast, onGroupUpdated, onLe
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
             {isAdmin && (
-              <TopBtn onClick={() => { setEditForm({ name: group.name, description: group.description || "", banner: group.banner || "#2d6a4f" }); setEditOpen(true); }}>✏ Edit</TopBtn>
+              <>
+                <TopBtn onClick={() => { setEditForm({ name: group.name, description: group.description || "", banner: group.banner || "#2d6a4f" }); setEditOpen(true); }}>✏ Edit</TopBtn>
+                <button onClick={() => setShowNotif(true)}
+                  style={{ background: notifCount > 0 ? "#dc2626" : "rgba(255,255,255,.2)", color: "white", border: "1px solid rgba(255,255,255,.35)", borderRadius: 6, padding: "6px 11px", fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", position: "relative" }}>
+                  🔔{notifCount > 0 ? ` ${notifCount}` : ""}
+                </button>
+              </>
             )}
             <TopBtn onClick={handleShare}>🔗 Invite</TopBtn>
             {isAdmin && <TopBtn onClick={handleNotify}>📢 Notify</TopBtn>}
@@ -84,20 +109,32 @@ export default function GroupView({ group, user, showToast, onGroupUpdated, onLe
         </div>
       </div>
 
-      <div style={{ background: "var(--surface)", borderBottom: "2px solid var(--border)", display: "flex", padding: "0 16px", flexShrink: 0 }}>
-        {["members", "plans", "chat"].map(t => (
+      <div style={{ background: "var(--surface)", borderBottom: "2px solid var(--border)", display: "flex", padding: "0 16px", flexShrink: 0, overflowX: "auto" }}>
+        {TABS.map(t => (
           <button key={t} onClick={() => setTab(t)}
-            style={{ padding: "11px 18px", fontFamily: "inherit", fontSize: 13, fontWeight: 500, background: "none", border: "none", borderBottom: tab === t ? "3px solid var(--accent)" : "3px solid transparent", marginBottom: -2, color: tab === t ? "var(--accent)" : "var(--ink2)", cursor: "pointer" }}>
-            {t === "members" ? "👤 Members" : t === "plans" ? "📅 Plans" : "💬 Chat"}
+            style={{ padding: "11px 16px", fontFamily: "inherit", fontSize: 13, fontWeight: 500, background: "none", border: "none", borderBottom: tab === t ? "3px solid var(--accent)" : "3px solid transparent", marginBottom: -2, color: tab === t ? "var(--accent)" : "var(--ink2)", cursor: "pointer", whiteSpace: "nowrap" }}>
+            {TAB_LABELS[t]}
           </button>
         ))}
       </div>
 
       <div style={{ flex: 1, overflow: tab === "chat" ? "hidden" : "auto", display: "flex", flexDirection: "column", padding: tab === "chat" ? 0 : 16 }}>
         {tab === "members" && <GroupMembers members={members} onlineUids={onlineUids} user={user} group={group} isAdmin={isAdmin} showToast={showToast} onGroupUpdated={onGroupUpdated} />}
-        {tab === "plans"   && <GroupPlans   members={members} groupId={group.id} />}
+        {tab === "plans"   && <GroupPlans   members={members} groupId={group.id} isAdmin={isAdmin} user={user} />}
+        {tab === "library" && <GroupLibrary groupId={group.id} user={user} isAdmin={isAdmin} showToast={showToast} />}
         {tab === "chat"    && <GroupChat    group={group} user={user} messages={messages} />}
       </div>
+
+      {showNotif && isAdmin && (
+        <GroupNotifications
+          groupId={group.id}
+          joinRequests={pendingJoin}
+          pendingPlans={pendingPlans}
+          pendingLibrary={pendingLib}
+          onClose={() => setShowNotif(false)}
+          showToast={showToast}
+        />
+      )}
 
       {editOpen && (
         <div onClick={e => e.target === e.currentTarget && setEditOpen(false)}

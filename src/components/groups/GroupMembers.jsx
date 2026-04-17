@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { kickMember, promoteMember, loadMemberWeeklyHours } from "../../firebase/groupsDb";
+import { db } from "../../firebase/config";
+import { ref, get } from "firebase/database";
 
 const GRID_CSS = `
 .gm-grid {
@@ -13,16 +15,29 @@ const GRID_CSS = `
 `;
 
 export default function GroupMembers({ members, onlineUids, user, group, isAdmin, showToast, onGroupUpdated }) {
-  const [weeklyHours, setWeeklyHours] = useState({});
+  const [weeklyHours,  setWeeklyHours]  = useState({});
+  const [fetchedNames, setFetchedNames] = useState({});
 
   useEffect(() => {
     loadMemberWeeklyHours(Object.keys(members)).then(setWeeklyHours).catch(() => {});
   }, [group.id]);
 
+  useEffect(() => {
+    const missing = Object.entries(members).filter(([, m]) => !m.name).map(([uid]) => uid);
+    if (!missing.length) return;
+    Promise.all(missing.map(uid =>
+      get(ref(db, `groups/${group.id}/members/${uid}`)).then(s => ({ uid, data: s.val() }))
+    )).then(results => {
+      const updates = {};
+      results.forEach(({ uid, data }) => { if (data?.name) updates[uid] = data.name; });
+      if (Object.keys(updates).length) setFetchedNames(prev => ({ ...prev, ...updates }));
+    }).catch(() => {});
+  }, [group.id, members]);
+
   const sorted = Object.entries(members).sort(([, a], [, b]) => {
     if (a.role === "admin" && b.role !== "admin") return -1;
     if (b.role === "admin" && a.role !== "admin") return 1;
-    return a.name.localeCompare(b.name);
+    return (a.name || "").localeCompare(b.name || "");
   });
 
   async function handleKick(uid, name) {
@@ -56,7 +71,7 @@ export default function GroupMembers({ members, onlineUids, user, group, isAdmin
           <MemberCard
             key={uid}
             uid={uid}
-            m={m}
+            m={{ ...m, name: m.name || fetchedNames[uid] || "Member" }}
             isOnline={onlineUids.has(uid)}
             isMe={uid === user.uid}
             showAdminActions={isAdmin && uid !== user.uid && m.role !== "admin"}

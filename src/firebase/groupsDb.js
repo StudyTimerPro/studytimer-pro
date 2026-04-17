@@ -154,3 +154,65 @@ export function notifyAll(gid, senderName) {
     createdAt: Date.now(),
   });
 }
+
+// ── Search all groups ────────────────────────────────────────────────
+export async function searchGroups(query) {
+  if (!query || query.trim().length < 2) return [];
+  const snap = await get(ref(db, "groups"));
+  if (!snap.exists()) return [];
+  const q = query.trim().toLowerCase();
+  const results = [];
+  snap.forEach(child => {
+    const g = child.val();
+    if (g.name?.toLowerCase().includes(q)) {
+      results.push({ id: child.key, name: g.name, description: g.description || "", memberCount: Object.keys(g.members || {}).length });
+    }
+  });
+  return results.slice(0, 10);
+}
+
+// ── Join requests ────────────────────────────────────────────────────
+export function sendJoinRequest(groupId, uid, name, photo) {
+  return set(ref(db, `groups/${groupId}/joinRequests/${uid}`), {
+    name: name || "User", photo: photo || "", uid, requestedAt: Date.now(), status: "pending",
+  });
+}
+
+export function listenJoinRequests(groupId, callback) {
+  const r = ref(db, `groups/${groupId}/joinRequests`);
+  onValue(r, snap => {
+    const data = snap.val() || {};
+    const list = Object.entries(data).filter(([, v]) => v.status === "pending").map(([id, v]) => ({ id, ...v }));
+    callback(list);
+  });
+  return () => off(r);
+}
+
+export async function approveJoinRequest(groupId, uid, name, photo) {
+  await update(ref(db, `groups/${groupId}/members/${uid}`), { name: name || "User", photo: photo || "", role: "member", joinedAt: Date.now(), online: false });
+  await update(ref(db, `groups/${groupId}/joinRequests/${uid}`), { status: "approved" });
+  await set(ref(db, `users/${uid}/groups/${groupId}`), Date.now());
+}
+
+export function rejectJoinRequest(groupId, requestId) {
+  return update(ref(db, `groups/${groupId}/joinRequests/${requestId}`), { status: "rejected" });
+}
+
+// ── Group shared plans ───────────────────────────────────────────────
+export function listenGroupPlans(groupId, callback) {
+  const r = ref(db, `groups/${groupId}/plans`);
+  onValue(r, snap => {
+    const data = snap.val() || {};
+    const list = Object.entries(data).map(([id, v]) => ({ id, ...v }));
+    callback(list);
+  });
+  return () => off(r);
+}
+
+export function approveGroupPlan(groupId, planId) {
+  return update(ref(db, `groups/${groupId}/plans/${planId}`), { approved: true });
+}
+
+export function rejectGroupPlan(groupId, planId) {
+  return remove(ref(db, `groups/${groupId}/plans/${planId}`));
+}

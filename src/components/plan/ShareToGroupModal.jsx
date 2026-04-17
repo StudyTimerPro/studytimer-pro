@@ -15,12 +15,19 @@ export default function ShareToGroupModal({ planId, planName, examId, user, onCl
     setSharing(group.id);
     try {
       const data = await exportPlan(user.uid, examId, planId);
-      if (!data) { showToast("Plan has no sessions"); setSharing(null); return; }
-      const sessions = (data.plan?.sessions || []).map(({ id, ...rest }) => rest);
+      if (!data) { showToast("Plan has no sessions to share"); setSharing(null); return; }
+      const sessions = Array.isArray(data.plan?.sessions)
+        ? data.plan.sessions.map(({ id, ...rest }) => rest)
+        : Object.values(data.plan?.sessions || {});
+      if (!sessions.length) { showToast("No sessions found in this plan"); setSharing(null); return; }
       const status = await shareGroupPlan(user.uid, user.displayName || "User", group.id, { name: planName, sessions });
-      showToast(status === "approved" ? "Plan shared ✓" : "Plan submitted for approval ✓");
+      showToast(status === "approved" ? "Plan shared ✓" : "Plan submitted for admin approval ✓");
       onClose();
-    } catch { showToast("Share failed"); setSharing(null); }
+    } catch (err) {
+      console.error("shareGroupPlan error:", err);
+      showToast("Share failed: " + (err?.message || "Unknown error"));
+      setSharing(null);
+    }
   }
 
   return (

@@ -1,15 +1,29 @@
-import React, { useState } from "react";
-import { createGroup, joinGroup } from "../../firebase/groupsDb";
+import React, { useState, useEffect } from "react";
+import { createGroup, joinGroup, searchGroups, sendJoinRequest } from "../../firebase/groupsDb";
 
 const BANNERS = ["#2d6a4f","#2563eb","#7c3aed","#dc2626","#d97706","#0891b2","#1a1814","#db2777"];
 
 export default function GroupSidebar({ groups, selectedId, user, loading, onSelect, onGroupsChange, showToast, onClose, isMobile }) {
-  const [search, setSearch] = useState("");
-  const [modal,  setModal]  = useState(null);
-  const [form,   setForm]   = useState({});
-  const [busy,   setBusy]   = useState(false);
+  const [search,        setSearch]        = useState("");
+  const [modal,         setModal]         = useState(null);
+  const [form,          setForm]          = useState({});
+  const [busy,          setBusy]          = useState(false);
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching,     setSearching]     = useState(false);
+  const [sentRequests,  setSentRequests]  = useState(new Set());
 
-  const filtered = groups.filter(g => g.name.toLowerCase().includes(search.toLowerCase()));
+  const joinedIds = new Set(groups.map(g => g.id));
+  const filtered  = groups.filter(g => g.name.toLowerCase().includes(search.toLowerCase()));
+
+  useEffect(() => {
+    if (search.trim().length < 2) { setSearchResults([]); return; }
+    const timer = setTimeout(async () => {
+      setSearching(true);
+      try { const r = await searchGroups(search.trim()); setSearchResults(r); }
+      catch {} finally { setSearching(false); }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   function openModal(type) { setForm({}); setModal(type); }
 
@@ -36,6 +50,19 @@ export default function GroupSidebar({ groups, selectedId, user, loading, onSele
     finally   { setBusy(false); }
   }
 
+  async function handleRequest(groupId) {
+    setSentRequests(prev => new Set([...prev, groupId]));
+    try {
+      await sendJoinRequest(groupId, user.uid, user.displayName || "User", user.photoURL || "");
+      showToast("Request sent!");
+    } catch {
+      showToast("Failed to send request");
+      setSentRequests(prev => { const s = new Set(prev); s.delete(groupId); return s; });
+    }
+  }
+
+  const globalResults = searchResults.filter(r => !joinedIds.has(r.id));
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: isMobile ? "100vh" : 500 }}>
       <div style={{ padding: "16px 14px 10px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
@@ -56,7 +83,7 @@ export default function GroupSidebar({ groups, selectedId, user, loading, onSele
 
       <div style={{ flex: 1, overflowY: "auto" }}>
         {loading && <p style={{ textAlign: "center", padding: 20, color: "var(--ink2)", fontSize: 13 }}>Loading...</p>}
-        {!loading && filtered.length === 0 && (
+        {!loading && filtered.length === 0 && search.trim().length < 2 && (
           <p style={{ textAlign: "center", padding: 24, color: "var(--ink2)", fontSize: 13 }}>
             {groups.length === 0 ? "No groups yet." : "No matches."}
           </p>
@@ -66,7 +93,7 @@ export default function GroupSidebar({ groups, selectedId, user, loading, onSele
           const count    = g.members ? Object.keys(g.members).length : 0;
           return (
             <div key={g.id} onClick={() => onSelect(g.id)}
-              style={{ padding: "11px 14px", cursor: "pointer", borderBottom: "1px solid var(--border)", background: isActive ? "var(--accent-light)" : "var(--surface)", display: "flex", alignItems: "center", gap: 10, transition: "background .15s" }}>
+              style={{ padding: "11px 14px", cursor: "pointer", borderBottom: "1px solid var(--border)", background: isActive ? "var(--accent-light)" : "var(--surface)", display: "flex", alignItems: "center", gap: 10 }}>
               <div style={{ width: 10, height: 10, borderRadius: "50%", background: g.banner || "var(--accent)", flexShrink: 0 }} />
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ fontWeight: 600, fontSize: 14, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.name}</div>
@@ -76,6 +103,31 @@ export default function GroupSidebar({ groups, selectedId, user, loading, onSele
             </div>
           );
         })}
+
+        {search.trim().length >= 2 && (
+          <>
+            <div style={{ padding: "8px 14px", fontSize: 11, fontWeight: 700, color: "var(--ink2)", textTransform: "uppercase", borderTop: "1px solid var(--border)" }}>
+              {searching ? "Searching..." : `All Groups (${globalResults.length})`}
+            </div>
+            {globalResults.map(g => {
+              const alreadyJoined = joinedIds.has(g.id);
+              const sent          = sentRequests.has(g.id);
+              return (
+                <div key={g.id} style={{ padding: "10px 14px", borderBottom: "1px solid var(--border)", background: "var(--surface)" }}>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: "var(--ink)" }}>{g.name}</div>
+                  {g.description && <div style={{ fontSize: 11, color: "var(--ink2)", marginTop: 2 }}>{g.description}</div>}
+                  <div style={{ fontSize: 11, color: "var(--ink2)", marginTop: 2 }}>{g.memberCount} member{g.memberCount !== 1 ? "s" : ""}</div>
+                  <button
+                    onClick={() => !alreadyJoined && !sent && handleRequest(g.id)}
+                    disabled={alreadyJoined || sent}
+                    style={{ marginTop: 6, fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 6, border: "none", cursor: alreadyJoined || sent ? "default" : "pointer", background: alreadyJoined ? "var(--border)" : sent ? "#d1fae5" : "var(--accent)", color: alreadyJoined || sent ? "var(--ink2)" : "white" }}>
+                    {alreadyJoined ? "Already Joined" : sent ? "Request Sent ✓" : "Request to Join"}
+                  </button>
+                </div>
+              );
+            })}
+          </>
+        )}
       </div>
 
       {modal && (
@@ -85,7 +137,6 @@ export default function GroupSidebar({ groups, selectedId, user, loading, onSele
             <h3 style={{ fontSize: 17, fontWeight: 700, marginBottom: 18, color: "var(--ink)" }}>
               {modal === "create" ? "Create Group" : "Join by Invite Code"}
             </h3>
-
             {modal === "create" ? (
               <>
                 <MField label="Group Name">
@@ -98,7 +149,7 @@ export default function GroupSidebar({ groups, selectedId, user, loading, onSele
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     {BANNERS.map(c => (
                       <div key={c} onClick={() => setForm({ ...form, banner: c })}
-                        style={{ width: 28, height: 28, borderRadius: 6, background: c, cursor: "pointer", border: form.banner === c ? "3px solid var(--ink)" : "2px solid transparent", flexShrink: 0 }} />
+                        style={{ width: 28, height: 28, borderRadius: 6, background: c, cursor: "pointer", border: form.banner === c ? "3px solid var(--ink)" : "2px solid transparent" }} />
                     ))}
                   </div>
                 </MField>
@@ -109,7 +160,6 @@ export default function GroupSidebar({ groups, selectedId, user, loading, onSele
                   placeholder="e.g. ABC123" style={{ ...inputS, textTransform: "uppercase", letterSpacing: 3, fontFamily: "monospace" }} />
               </MField>
             )}
-
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 20 }}>
               <button onClick={() => setModal(null)} style={cancelBtn}>Cancel</button>
               <button onClick={modal === "create" ? handleCreate : handleJoin} disabled={busy}
