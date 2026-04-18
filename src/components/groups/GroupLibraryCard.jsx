@@ -7,8 +7,8 @@ function fileIcon(type) {
   return "🔗";
 }
 
-export default function GroupLibraryCard({ item, uid, isAdmin, onView, onDownload, onLike, onPin, onApprove, onRemove }) {
-  const liked = !!(item.likes?.[uid]);
+export default function GroupLibraryCard({ item, uid, isAdmin, onView, onDownload, onPreview, onLike, onPin, onApprove, onRemove }) {
+  const liked  = !!(item.likes?.[uid]);
   const isFile = item.type !== "link";
 
   return (
@@ -47,10 +47,14 @@ export default function GroupLibraryCard({ item, uid, isAdmin, onView, onDownloa
         <button onClick={onLike} style={{ ...smBtn, background: liked ? "#fde8e8" : "var(--bg)", color: liked ? "#e63946" : "var(--ink2)" }}>
           {liked ? "❤️" : "🤍"}
         </button>
-        <button onClick={isFile ? onDownload : onView}
-          style={{ ...smBtn, flex: 1, justifyContent: "center", background: "#eaf0fb", color: "#2563eb" }}>
-          {isFile ? "📥 Download" : "🔗 Visit"}
+        <button onClick={onPreview} style={{ ...smBtn, background: "#f0f4ff", color: "#4f46e5" }}>
+          👁 Preview
         </button>
+        {isFile && (
+          <button onClick={onDownload} style={{ ...smBtn, background: "#eaf0fb", color: "#2563eb" }}>
+            📥
+          </button>
+        )}
         {isAdmin && !item.approved && (
           <button onClick={onApprove} style={{ ...smBtn, background: "#eaf0fb", color: "#2563eb" }}>✓</button>
         )}

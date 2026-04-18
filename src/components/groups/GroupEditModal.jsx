@@ -2,6 +2,7 @@ import React, { useRef, useState } from "react";
 import { storage } from "../../firebase/config";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { compressImage } from "../../utils/imageCompressor";
+import { LoadingOverlay } from "../common/LoadingAnimation";
 
 const BANNERS = ["#2d6a4f","#2563eb","#7c3aed","#dc2626","#d97706","#0891b2","#1a1814","#db2777"];
 
@@ -31,7 +32,8 @@ export default function GroupEditModal({ groupId, editForm, setEditForm, onClose
   return (
     <div onClick={e => e.target === e.currentTarget && onClose()}
       style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 400, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ background: "var(--surface)", borderRadius: 14, padding: 24, width: "min(420px,92vw)", boxShadow: "0 20px 60px rgba(0,0,0,.2)", maxHeight: "90vh", overflowY: "auto" }}>
+      <div style={{ background: "var(--surface)", borderRadius: 14, padding: 24, width: "min(420px,92vw)", boxShadow: "0 20px 60px rgba(0,0,0,.2)", maxHeight: "90vh", overflowY: "auto", position: "relative" }}>
+        {(busy || photoUploading) && <LoadingOverlay message={photoUploading ? "Uploading photo…" : "Saving…"} />}
         <h3 style={{ fontSize: 17, fontWeight: 700, marginBottom: 18, color: "var(--ink)" }}>Edit Group</h3>
 
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}>

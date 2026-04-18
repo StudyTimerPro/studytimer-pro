@@ -10,7 +10,7 @@ function getFileType(file) {
   return "link";
 }
 
-export async function uploadAndSaveLibraryItem(groupId, uid, userName, { file, linkUrl, linkName }, isAdmin) {
+export async function uploadAndSaveLibraryItem(groupId, uid, userName, { file, linkUrl, linkName, displayName }, isAdmin) {
   let url, name, type, storagePath = "";
   if (file) {
     const ts = Date.now();
@@ -18,7 +18,7 @@ export async function uploadAndSaveLibraryItem(groupId, uid, userName, { file, l
     const sRef = storageRef(storage, storagePath);
     await uploadBytes(sRef, file);
     url  = await getDownloadURL(sRef);
-    name = file.name;
+    name = displayName || file.name;
     type = getFileType(file);
   } else {
     url  = linkUrl;

@@ -5,6 +5,7 @@ import { auth } from "../../firebase/config";
 import app from "../../firebase/config";
 import { saveUser } from "../../firebase/db";
 import useStore from "../../store/useStore";
+import { LoadingOverlay } from "./LoadingAnimation";
 
 export default function ProfileModal({ user, onClose }) {
   const { setUser, showToast, streak, leaderboard } = useStore();
@@ -68,6 +69,7 @@ export default function ProfileModal({ user, onClose }) {
       style={overlayS}
     >
       <div style={cardS}>
+        {busy && <LoadingOverlay message="Saving…" />}
         {/* Close */}
         <button onClick={onClose} style={closeS} title="Close">✕</button>
 

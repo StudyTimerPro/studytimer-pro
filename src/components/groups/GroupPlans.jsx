@@ -2,19 +2,19 @@ import React, { useEffect, useState } from "react";
 import { useAuth } from "../../hooks/useAuth";
 import useStore from "../../store/useStore";
 import { loadMemberPlans, listenGroupPlans, approveGroupPlan } from "../../firebase/groupsDb";
-import { enrollInPlan, toggleLikePlan, pinPlan, removePlan } from "../../firebase/groupsEngagement";
+import { enrollInPlan, toggleLikePlan, pinPlan, removePlan, incrementPlanViewCount } from "../../firebase/groupsEngagement";
 import { savePlanToExam, saveExam } from "../../firebase/db";
-import GroupPlanCard from "./GroupPlanCard";
+import { LoadingOverlay } from "../common/LoadingAnimation";
 import PlanSessionsModal from "./PlanSessionsModal";
 
-const GRID_CSS = `
-.gp-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
-@media (max-width: 640px) { .gp-grid { grid-template-columns: 1fr; } }
+const CSS = `
+.gp-stats { display: flex; gap: 10px; }
+@media (max-width: 640px) { .gp-stats { display: none !important; } }
 `;
 
 export default function GroupPlans({ members, groupId, groupName, isAdmin, user: userProp }) {
-  const { user: authUser }                                          = useAuth();
-  const user                                                        = userProp || authUser;
+  const { user: authUser }  = useAuth();
+  const user                = userProp || authUser;
   const { currentExamId, currentExamName, setCurrentExamId, setCurrentExamName, setExams, exams, showToast } = useStore();
   const [memberPlans,  setMemberPlans]  = useState([]);
   const [groupPlans,   setGroupPlans]   = useState([]);
@@ -39,10 +39,8 @@ export default function GroupPlans({ members, groupId, groupName, isAdmin, user:
     if (currentExamId) return { examId: currentExamId, examName: currentExamName || "Exam" };
     const name   = groupName || "Group Study";
     const examId = await saveExam(user.uid, { name });
-    const updated = [...exams, { id: examId, name, createdAt: Date.now() }];
-    setCurrentExamId(examId);
-    setCurrentExamName(name);
-    setExams(updated);
+    setCurrentExamId(examId); setCurrentExamName(name);
+    setExams([...exams, { id: examId, name, createdAt: Date.now() }]);
     return { examId, examName: name };
   }
 
@@ -52,34 +50,32 @@ export default function GroupPlans({ members, groupId, groupName, isAdmin, user:
     setBusy(plan.id);
     try {
       const { examId, examName } = await resolveExam();
-      await Promise.all([
-        enrollInPlan(groupId, plan.id, user.uid),
-        savePlanToExam(user.uid, examId, plan.name, sessions),
-      ]);
+      await Promise.all([enrollInPlan(groupId, plan.id, user.uid), savePlanToExam(user.uid, examId, plan.name, sessions)]);
       showToast(`Plan enrolled under ${examName}!`);
     } catch { showToast("Failed to enroll"); }
     finally { setBusy(null); }
   }
 
+  async function handleViewSessions(plan) {
+    setViewingPlan(plan);
+    try { await incrementPlanViewCount(groupId, plan.id); } catch {}
+  }
+
   async function handleLike(plan) {
-    try { await toggleLikePlan(groupId, plan.id, user.uid); }
-    catch { showToast("Failed to like"); }
+    try { await toggleLikePlan(groupId, plan.id, user.uid); } catch { showToast("Failed to like"); }
   }
 
   async function handleApprove(planId) {
-    try { await approveGroupPlan(groupId, planId); showToast("Plan approved ✓"); }
-    catch { showToast("Failed"); }
+    try { await approveGroupPlan(groupId, planId); showToast("Plan approved ✓"); } catch { showToast("Failed"); }
   }
 
   async function handlePin(plan) {
-    try { await pinPlan(groupId, plan.id, !plan.pinned); }
-    catch { showToast("Failed to pin"); }
+    try { await pinPlan(groupId, plan.id, !plan.pinned); } catch { showToast("Failed to pin"); }
   }
 
   async function handleRemove(planId) {
     if (!confirm("Remove this plan?")) return;
-    try { await removePlan(groupId, planId); showToast("Plan removed"); }
-    catch { showToast("Failed"); }
+    try { await removePlan(groupId, planId); showToast("Plan removed"); } catch { showToast("Failed"); }
   }
 
   async function handleAddMember(name, sessions) {
@@ -95,24 +91,25 @@ export default function GroupPlans({ members, groupId, groupName, isAdmin, user:
 
   return (
     <div>
-      <style>{GRID_CSS}</style>
+      <style>{CSS}</style>
 
-      <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, color: "var(--ink)" }}>
-        📋 Group Plans ({groupPlans.length})
-      </h3>
+      <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 10, color: "var(--ink)" }}>📋 Group Plans ({groupPlans.length})</h3>
+
       {groupPlans.length === 0 && (
         <p style={{ color: "var(--ink2)", fontSize: 13, marginBottom: 20 }}>No plans shared yet. Use "Share to Group" from Today's Plan.</p>
       )}
+
       {groupPlans.length > 0 && (
-        <div className="gp-grid" style={{ marginBottom: 24 }}>
+        <div style={{ position: "relative", border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden", marginBottom: 24 }}>
+          {busy && <LoadingOverlay message="Enrolling…" size={50} />}
           {groupPlans.map(plan => (
-            <GroupPlanCard key={plan.id} plan={plan} uid={user.uid} isAdmin={isAdmin}
+            <PlanRow key={plan.id} plan={plan} uid={user.uid} isAdmin={isAdmin} enrollBusy={busy === plan.id}
+              onView={() => handleViewSessions(plan)}
               onLike={() => handleLike(plan)}
               onEnroll={() => busy !== plan.id && handleEnroll(plan)}
               onApprove={() => handleApprove(plan.id)}
               onPin={() => handlePin(plan)}
               onRemove={() => handleRemove(plan.id)}
-              onViewSessions={() => setViewingPlan(plan)}
             />
           ))}
         </div>
@@ -126,9 +123,8 @@ export default function GroupPlans({ members, groupId, groupName, isAdmin, user:
         return (
           <div key={uid} style={{ background: "var(--surface)", borderRadius: 10, padding: "12px 14px", marginBottom: 10, border: "1px solid var(--border)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              {photo
-                ? <img src={photo} alt="" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover" }} />
-                : <Initials name={name} size={28} />}
+              {photo ? <img src={photo} alt="" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover" }} />
+                     : <Initials name={name} size={28} />}
               <span style={{ fontWeight: 600, fontSize: 13, color: "var(--ink)", flex: 1 }}>{name}</span>
               <span style={{ fontSize: 11, color: "var(--ink2)" }}>{sessions.length} session{sessions.length !== 1 ? "s" : ""}</span>
               <button onClick={() => handleAddMember(name, sessions)} disabled={busy === key || !sessions.length}
@@ -151,29 +147,61 @@ export default function GroupPlans({ members, groupId, groupName, isAdmin, user:
       })}
 
       {viewingPlan && (
-        <PlanSessionsModal
-          plan={viewingPlan}
-          onClose={() => setViewingPlan(null)}
+        <PlanSessionsModal plan={viewingPlan} onClose={() => setViewingPlan(null)}
           onEnroll={() => { handleEnroll(viewingPlan); setViewingPlan(null); }}
-          enrolled={!!(viewingPlan.enrollments?.[user.uid])}
-          enrollBusy={busy === viewingPlan.id}
+          enrolled={!!(viewingPlan.enrollments?.[user.uid])} enrollBusy={busy === viewingPlan.id}
         />
       )}
     </div>
   );
 }
 
-function Initials({ name, size }) {
+function PlanRow({ plan, uid, isAdmin, enrollBusy, onView, onLike, onEnroll, onApprove, onPin, onRemove }) {
+  const sessions  = Array.isArray(plan.sessions) ? plan.sessions : Object.values(plan.sessions || {});
+  const liked     = !!(plan.likes?.[uid]);
+  const enrolled  = !!(plan.enrollments?.[uid]);
+  const isPending = !plan.approved;
   return (
-    <div style={{ width: size, height: size, borderRadius: "50%", background: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.45, color: "white", fontWeight: 700, flexShrink: 0 }}>
-      {(name || "?").charAt(0).toUpperCase()}
+    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderBottom: "1px solid var(--border)", background: "var(--surface)", minHeight: 56, flexWrap: "wrap" }}>
+      {plan.pinned && <span style={{ fontSize: 13, flexShrink: 0 }}>📌</span>}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 600, fontSize: 13, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{plan.name}</div>
+        <div style={{ fontSize: 11, color: "var(--ink2)" }}>{plan.sharedByName || "Unknown"}</div>
+      </div>
+      <div className="gp-stats" style={{ fontSize: 12, color: "var(--ink2)", flexShrink: 0 }}>
+        <span>📋 {sessions.length}</span>
+        <span>👥 {plan.enrollCount || 0}</span>
+        <span>❤️ {plan.likeCount || 0}</span>
+        <span>👁 {plan.viewCount || 0}</span>
+      </div>
+      <span style={{ fontSize: 10, fontWeight: 700, background: isPending ? "#fef3c7" : "#d1fae5", color: isPending ? "#d97706" : "#059669", borderRadius: 4, padding: "2px 6px", whiteSpace: "nowrap", flexShrink: 0 }}>
+        {isPending ? "⏳ Pending" : "✓ Approved"}
+      </span>
+      <div style={{ display: "flex", gap: 3, flexShrink: 0, flexWrap: "wrap" }}>
+        <button onClick={onView} style={rb}>👁</button>
+        <button onClick={onLike} style={{ ...rb, color: liked ? "#e63946" : "var(--ink2)" }}>{liked ? "❤️" : "🤍"}</button>
+        <button onClick={onEnroll} disabled={enrolled || isPending || enrollBusy}
+          style={{ ...rb, background: enrolled ? "#d1fae5" : !plan.approved ? "var(--bg)" : "var(--accent)", color: enrolled ? "#059669" : !plan.approved ? "var(--ink2)" : "white" }}>
+          {enrollBusy ? "…" : enrolled ? "✅" : "➕ Enroll"}
+        </button>
+        {isAdmin && isPending && <button onClick={onApprove} style={{ ...rb, background: "#d1fae5", color: "#059669" }}>✓</button>}
+        {isAdmin && <>
+          <button onClick={onPin} style={{ ...rb, color: plan.pinned ? "#d97706" : "var(--ink2)" }}>📍</button>
+          <button onClick={onRemove} style={{ ...rb, background: "#fde8e8", color: "#e63946" }}>🗑</button>
+        </>}
+      </div>
     </div>
   );
+}
+
+function Initials({ name, size }) {
+  return <div style={{ width: size, height: size, borderRadius: "50%", background: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.45, color: "white", fontWeight: 700, flexShrink: 0 }}>{(name || "?").charAt(0).toUpperCase()}</div>;
 }
 
 function fmt12(t) {
   if (!t) return "—";
   const [h, m] = t.split(":").map(Number);
-  const ap = h >= 12 ? "PM" : "AM";
-  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${ap}`;
+  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
 }
+
+const rb = { border: "1px solid var(--border)", borderRadius: 6, padding: "4px 7px", fontSize: 11, fontWeight: 600, cursor: "pointer", background: "var(--bg)", color: "var(--ink2)" };

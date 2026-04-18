@@ -44,6 +44,12 @@ export function removePlan(groupId, planId) {
   return remove(ref(db, `groups/${groupId}/plans/${planId}`));
 }
 
+export async function incrementPlanViewCount(groupId, planId) {
+  const r = ref(db, `groups/${groupId}/plans/${planId}/viewCount`);
+  const snap = await get(r);
+  await set(r, (snap.val() || 0) + 1);
+}
+
 export async function toggleMemberLike(groupId, targetUid, fromUid) {
   const r = ref(db, `groups/${groupId}/memberLikes/${targetUid}/${fromUid}`);
   const snap = await get(r);

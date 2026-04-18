@@ -10,6 +10,7 @@ import {
   saveAIPlansToExam,
 } from "../../utils/aiService";
 import useStore from "../../store/useStore";
+import LoadingAnimation from "../common/LoadingAnimation";
 
 // ── Small utilities ──────────────────────────────────────────────────────────
 const daysLeft = (examDate) => {
@@ -422,9 +423,16 @@ export default function AIPlanModal({ user, onClose, onCreated }) {
           </div>
         )}
 
+        {busy && !stage && tab === 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px" }}>
+            <LoadingAnimation size={32} />
+            <span style={{ fontSize: 12, color: "var(--ink2)" }}>Thinking…</span>
+          </div>
+        )}
         {stage && (
-          <div style={{ padding: 10, fontSize: 12, color: "var(--ink2)" }}>
-            Generating plan — Stage {stage} of 2…
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px" }}>
+            <LoadingAnimation size={32} />
+            <span style={{ fontSize: 12, color: "var(--ink2)" }}>Generating plan — Stage {stage} of 2…</span>
           </div>
         )}
 

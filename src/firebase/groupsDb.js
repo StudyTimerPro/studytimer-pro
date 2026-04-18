@@ -40,6 +40,8 @@ export async function leaveGroup(uid, gid) {
 }
 
 export async function kickMember(memberUid, gid) {
+  const creatorSnap = await get(ref(db, `groups/${gid}/createdBy`));
+  if (creatorSnap.val() === memberUid) throw new Error("Cannot remove group creator");
   await remove(ref(db, `groups/${gid}/members/${memberUid}`));
   await remove(ref(db, `users/${memberUid}/groups/${gid}`));
 }

@@ -94,10 +94,11 @@ export default function GroupMembers({ members, onlineUids, user, group, isAdmin
         {sorted.map(([uid, m]) => {
           const name        = m.name || fetchedNames[uid] || "Member";
           const photo       = m.photo || fetchedPhotos[uid] || "";
-          const isMe        = uid === user.uid;
+          const isMe           = uid === user.uid;
+          const isTargetCreator = uid === group.createdBy;
           const showPromote = isAdmin && !isMe && m.role !== "admin";
-          const showDemote  = isCreator && !isMe && m.role === "admin" && uid !== group.createdBy;
-          const showRemove  = (isAdmin || isCreator) && !isMe;
+          const showDemote  = isCreator && !isMe && m.role === "admin" && !isTargetCreator;
+          const showRemove  = !isMe && !isTargetCreator && (isCreator || (isAdmin && m.role !== "admin"));
           const likes       = memberLikes[uid] || {};
           const likeCount   = Object.keys(likes).length;
           const liked       = !!likes[user.uid];

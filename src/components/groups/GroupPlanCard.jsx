@@ -32,6 +32,7 @@ export default function GroupPlanCard({ plan, uid, isAdmin, onLike, onEnroll, on
         <span>📋 {sessions.length} session{sessions.length !== 1 ? "s" : ""}</span>
         <span>👥 {plan.enrollCount || 0} enrolled</span>
         <span>❤️ {plan.likeCount || 0}</span>
+        <span>👁 {plan.viewCount || 0}</span>
       </div>
 
       <div style={{ display: "flex", gap: 5, flexWrap: "wrap", borderTop: "1px solid var(--border)", paddingTop: 10 }}>

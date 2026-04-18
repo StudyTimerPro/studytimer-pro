@@ -10,6 +10,7 @@ import {
 import AIPlanModal from "../components/plan/AIPlanModal";
 import AddExamModal from "../components/plan/AddExamModal";
 import ExamPlanSelector from "../components/plan/ExamPlanSelector";
+import { LoadingOverlay } from "../components/common/LoadingAnimation";
 
 export default function TodaysPlan() {
   const { user } = useAuth();
@@ -24,17 +25,20 @@ export default function TodaysPlan() {
   const [form, setForm] = useState(defaultForm());
   const [showAI, setShowAI] = useState(false);
   const [showAddExam, setShowAddExam] = useState(false);
+  const [loadingInit, setLoadingInit] = useState(true);
 
   // Initial load: fetch exams, default to first exam + first plan
   useEffect(() => {
     if (!user) return;
     (async () => {
+      setLoadingInit(true);
       const e = await getExams(user.uid);
       setExams(e);
       if (e.length && !currentExamId) {
         setCurrentExamId(e[0].id);
         setCurrentExamName(e[0].name);
       }
+      setLoadingInit(false);
     })();
   }, [user]);
 
@@ -115,7 +119,8 @@ export default function TodaysPlan() {
   const hasPlan = !!currentPlanId;
 
   return (
-    <div style={{ paddingBottom: 80 }}>
+    <div style={{ paddingBottom: 80, position: "relative" }}>
+      {loadingInit && <LoadingOverlay message="Loading your plans…" />}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <div style={{ display: "flex", gap: 12 }}>
           <Chip label="Sessions" value={sessions.length} />
