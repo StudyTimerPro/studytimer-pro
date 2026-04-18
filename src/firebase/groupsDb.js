@@ -1,5 +1,6 @@
 import { db } from "./config";
 import { ref, set, get, push, update, remove, onValue, off, onDisconnect } from "firebase/database";
+import { notifyJoinApproved } from "../utils/notificationHelper";
 
 function makeCode() {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
@@ -200,6 +201,8 @@ export async function approveJoinRequest(groupId, uid, name, photo) {
   await update(ref(db, `groups/${groupId}/members/${uid}`), { name: name || "User", photo: photo || "", role: "member", joinedAt: Date.now(), online: false });
   await update(ref(db, `groups/${groupId}/joinRequests/${uid}`), { status: "approved" });
   await set(ref(db, `users/${uid}/groups/${groupId}`), Date.now());
+  const nameSnap = await get(ref(db, `groups/${groupId}/name`));
+  notifyJoinApproved(uid, nameSnap.val() || "the group").catch(() => {});
 }
 
 export function rejectJoinRequest(groupId, requestId) {

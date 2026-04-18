@@ -8,7 +8,12 @@
       "Bash(ls C:/Users/krish/studytimer-pro/.env*)",
       "Bash(npx vite *)",
       "Bash(npm run *)",
-      "Bash(npm uninstall *)"
+      "Bash(npm uninstall *)",
+      "Bash(node -e \"require\\('./node_modules/firebase/messaging'\\)\")",
+      "Read(//e/my-project/**)",
+      "Bash(firebase deploy *)",
+      "Bash(node -e \"require\\('./functions/index.js'\\)\")",
+      "Bash(node -e \"require\\('./index.js'\\)\")"
     ]
   }
 }

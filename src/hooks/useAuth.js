@@ -5,7 +5,7 @@ import { saveUser, getUserSettings, getWastageAll } from "../firebase/db";
 import useStore from "../store/useStore";
 
 export function useAuth() {
-  const { user, setUser, showToast, setSettings, setSettingsLoaded, setDarkMode, setStreak } = useStore();
+  const { user, setUser, showToast, setSettings, setSettingsLoaded, setDarkMode, setStreak, currentExamId, currentPlanId } = useStore();
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -15,6 +15,7 @@ export function useAuth() {
           name:  firebaseUser.displayName,
           email: firebaseUser.email,
           photo: firebaseUser.photoURL,
+          lastActive: Date.now(),
         });
 
         // Load settings + apply dark mode
@@ -36,6 +37,12 @@ export function useAuth() {
     });
     return () => unsub();
   }, []);
+
+  // Sync currentExamId/currentPlanId to Firebase for session reminder function
+  useEffect(() => {
+    if (!user?.uid || !currentExamId) return;
+    saveUser(user.uid, { currentExamId, currentPlanId: currentPlanId || null });
+  }, [user?.uid, currentExamId, currentPlanId]);
 
   const login = async () => {
     try {

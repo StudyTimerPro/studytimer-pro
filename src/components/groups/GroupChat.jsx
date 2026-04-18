@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import { sendMessage } from "../../firebase/groupsDb";
+import { notifyMention } from "../../utils/notificationHelper";
 
 export default function GroupChat({ group, user, messages }) {
   const [text,         setText]         = useState("");
@@ -61,6 +62,9 @@ export default function GroupChat({ group, user, messages }) {
     const mentions = allMembers.filter(m => trimmed.includes(`@${m.name}`));
     try {
       await sendMessage(group.id, user.uid, user, trimmed, mentions);
+      for (const m of mentions) {
+        notifyMention(m.uid, user.displayName || "Someone", group.name, group.id).catch(() => {});
+      }
       setText(""); setMentionSearch(null);
     } catch { }
     finally { setSending(false); }

@@ -64,6 +64,12 @@ const useStore = create((set) => ({
   streak:           0,
   setStreak:        (streak) => set({ streak }),
 
+  // ── Notifications ──────────────────────────
+  unreadNotifCount: 0,
+  setUnreadNotifCount: (unreadNotifCount) => set({ unreadNotifCount }),
+  notifications:    [],
+  setNotifications: (notifications) => set({ notifications }),
+
 }));
 
 export default useStore;

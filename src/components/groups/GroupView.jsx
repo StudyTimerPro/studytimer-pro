@@ -132,7 +132,8 @@ export default function GroupView({ group, user, showToast, onGroupUpdated, onLe
 
       {showNotif && isAdmin && (
         <GroupNotifications groupId={group.id} joinRequests={pendingJoin} pendingPlans={pendingPlans}
-          pendingLibrary={pendingLib} onClose={() => setShowNotif(false)} showToast={showToast} />
+          pendingLibrary={pendingLib} onClose={() => setShowNotif(false)} showToast={showToast}
+          groupName={group.name} members={members} />
       )}
 
       {editOpen && (

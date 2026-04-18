@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 import BurgerMenu from "./BurgerMenu";
 import ProfileModal from "./ProfileModal";
+import NotificationBell from "./NotificationBell";
 
 const tabs = [
   { id: "/",            label: "📅 Today's Plan" },
@@ -45,6 +46,7 @@ export default function Navbar() {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {user && <NotificationBell uid={user.uid} />}
           {user ? (
             <ProfileAvatar user={user} onClick={() => setShowProfile(true)} />
           ) : (

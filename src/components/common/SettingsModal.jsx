@@ -3,14 +3,26 @@ import { updateProfile } from "firebase/auth";
 import { auth } from "../../firebase/config";
 import useStore from "../../store/useStore";
 import { saveUserSettings, saveUser } from "../../firebase/db";
+import { requestPermissionAndGetToken } from "../../firebase/messaging";
 
 export default function SettingsModal({ user, onClose }) {
-  const { settings, setSettings, darkMode, setDarkMode, setUser } = useStore();
+  const { settings, setSettings, darkMode, setDarkMode, setUser, showToast } = useStore();
   const [displayName, setDisplayName] = useState(settings?.displayName || user?.displayName || "");
   const [dailyGoal, setDailyGoal] = useState(settings?.dailyGoalHours || 6);
   const [examName, setExamName] = useState(settings?.examName || "");
   const [examDate, setExamDate] = useState(settings?.examDate || "");
   const [busy, setBusy] = useState(false);
+  const [notifStatus, setNotifStatus] = useState(() => {
+    if (!("Notification" in window)) return "unsupported";
+    return Notification.permission;
+  });
+
+  async function handleEnableNotifications() {
+    const token = await requestPermissionAndGetToken(user.uid);
+    setNotifStatus(Notification.permission);
+    if (token) showToast("Notifications enabled ✓");
+    else if (Notification.permission === "denied") showToast("Enable notifications in browser settings");
+  }
 
   async function handleSave() {
     setBusy(true);
@@ -59,6 +71,20 @@ export default function SettingsModal({ user, onClose }) {
         >
           {darkMode ? "☀️ Switch to Light Mode" : "🌙 Switch to Dark Mode"}
         </button>
+      </Field>
+
+      <Field label="Notifications">
+        {notifStatus === "granted" ? (
+          <div style={{ ...inputS, color: "#059669", background: "#d1fae5", border: "1px solid #059669", textAlign: "center" }}>✅ Notifications enabled</div>
+        ) : notifStatus === "denied" ? (
+          <div style={{ ...inputS, color: "#dc2626", background: "#fde8e8", border: "1px solid #dc2626", fontSize: 12 }}>❌ Blocked — enable in browser settings</div>
+        ) : notifStatus === "unsupported" ? (
+          <div style={{ ...inputS, color: "var(--ink2)", textAlign: "center", fontSize: 13 }}>Not supported in this browser</div>
+        ) : (
+          <button onClick={handleEnableNotifications} style={{ ...inputS, cursor: "pointer", background: "var(--accent)", color: "white", border: "none", textAlign: "center", fontWeight: 600 }}>
+            🔔 Enable Notifications
+          </button>
+        )}
       </Field>
 
       <div style={{ display: "flex", gap: 10, marginTop: 24 }}>
