@@ -12,20 +12,26 @@ function getMsg() {
 }
 
 export async function requestPermissionAndGetToken(uid) {
-  if (!("Notification" in window) || !("serviceWorker" in navigator)) return null;
+  if (!("Notification" in window)) { console.log("FCM: Notifications API not supported"); return null; }
+  if (!("serviceWorker" in navigator)) { console.log("FCM: Service Worker not supported"); return null; }
   const permission = await Notification.requestPermission();
+  console.log("FCM: Notification permission:", permission);
   if (permission !== "granted") return null;
   try {
+    console.log("FCM: Registering service worker...");
     const reg = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+    console.log("FCM: Service worker registered:", reg.scope);
     const token = await getToken(getMsg(), { vapidKey: VAPID_KEY, serviceWorkerRegistration: reg });
+    console.log("FCM: Token", token ? "obtained" : "not obtained");
     if (token) {
       await set(ref(db, `users/${uid}/fcmToken`), token);
       await set(ref(db, `users/${uid}/fcmTokenUpdatedAt`), Date.now());
       await set(ref(db, `users/${uid}/notificationsEnabled`), true);
+      console.log("FCM: Token saved to DB");
     }
     return token || null;
   } catch (err) {
-    console.error("FCM token error:", err);
+    console.log("FCM: Error getting token:", err.message || err);
     return null;
   }
 }

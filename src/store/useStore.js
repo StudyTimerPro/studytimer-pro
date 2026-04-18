@@ -70,6 +70,20 @@ const useStore = create((set) => ({
   notifications:    [],
   setNotifications: (notifications) => set({ notifications }),
 
+  // ── Current Group context (for Navbar bell) ─────────────────
+  currentGroupId:         null,
+  setCurrentGroupId:      (currentGroupId) => set({ currentGroupId }),
+  currentGroupRole:       null,
+  setCurrentGroupRole:    (currentGroupRole) => set({ currentGroupRole }),
+  currentGroupName:       "",
+  setCurrentGroupName:    (currentGroupName) => set({ currentGroupName }),
+  currentGroupMembers:    {},
+  setCurrentGroupMembers: (currentGroupMembers) => set({ currentGroupMembers }),
+  groupPendingCount:      0,
+  setGroupPendingCount:   (groupPendingCount) => set({ groupPendingCount }),
+  showGroupNotif:         false,
+  setShowGroupNotif:      (showGroupNotif) => set({ showGroupNotif }),
+
 }));
 
 export default useStore;

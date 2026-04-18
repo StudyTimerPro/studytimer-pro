@@ -13,7 +13,8 @@
       "Read(//e/my-project/**)",
       "Bash(firebase deploy *)",
       "Bash(node -e \"require\\('./functions/index.js'\\)\")",
-      "Bash(node -e \"require\\('./index.js'\\)\")"
+      "Bash(node -e \"require\\('./index.js'\\)\")",
+      "PowerShell(Get-Content *)"
     ]
   }
 }

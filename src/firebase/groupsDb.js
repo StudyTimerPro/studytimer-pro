@@ -1,5 +1,6 @@
-import { db } from "./config";
+import { db, storage } from "./config";
 import { ref, set, get, push, update, remove, onValue, off, onDisconnect } from "firebase/database";
+import { ref as sRef, listAll, deleteObject } from "firebase/storage";
 import { notifyJoinApproved } from "../utils/notificationHelper";
 
 function makeCode() {
@@ -226,4 +227,22 @@ export function approveGroupPlan(groupId, planId) {
 
 export function rejectGroupPlan(groupId, planId) {
   return remove(ref(db, `groups/${groupId}/plans/${planId}`));
+}
+
+// ── Delete group with full cleanup ───────────────────────────
+export async function deleteGroup(groupId, uid) {
+  const snap = await get(ref(db, `groups/${groupId}`));
+  if (!snap.exists()) return;
+  const g = snap.val();
+  if (g.createdBy !== uid) throw new Error("Only group creator can delete this group");
+  for (const folder of [`groupBanners/${groupId}`, `groupFiles/${groupId}`]) {
+    try { const list = await listAll(sRef(storage, folder)); await Promise.all(list.items.map(i => deleteObject(i))); } catch {}
+  }
+  const memberUids = Object.keys(g.members || {});
+  await Promise.all(memberUids.map(muid => remove(ref(db, `users/${muid}/groups/${groupId}`))));
+  await Promise.all([
+    remove(ref(db, `groups/${groupId}`)),
+    remove(ref(db, `groupChat/${groupId}`)),
+    g.inviteCode ? remove(ref(db, `inviteCodes/${g.inviteCode}`)) : Promise.resolve(),
+  ]);
 }

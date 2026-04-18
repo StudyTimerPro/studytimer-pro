@@ -142,6 +142,7 @@ function ProfileAvatar({ user, onClick }) {
             src={user.photoURL}
             alt={name}
             referrerPolicy="no-referrer"
+            loading="lazy"
             style={{ width: "100%", height: "100%", objectFit: "cover" }}
           />
         ) : (

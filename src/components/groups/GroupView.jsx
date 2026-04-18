@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from "react";
-import { listenOnlineMembers, listenChat, setupPresence, updateGroup, leaveGroup, notifyAll, listenJoinRequests, listenGroupPlans } from "../../firebase/groupsDb";
+import { listenOnlineMembers, listenChat, setupPresence, updateGroup, leaveGroup, notifyAll, listenJoinRequests, listenGroupPlans, deleteGroup } from "../../firebase/groupsDb";
 import { listenLibraryItems } from "../../firebase/groupsLibrary";
+import useStore from "../../store/useStore";
 import GroupPlans          from "./GroupPlans";
 import GroupMembers        from "./GroupMembers";
 import GroupChat           from "./GroupChat";
 import GroupLibrary        from "./GroupLibrary";
 import GroupNotifications  from "./GroupNotifications";
 import GroupEditModal      from "./GroupEditModal";
+import { LoadingOverlay }  from "../common/LoadingAnimation";
 
 export default function GroupView({ group, user, showToast, onGroupUpdated, onLeave, onRefresh }) {
   const [tab,          setTab]          = useState("members");
@@ -15,15 +17,37 @@ export default function GroupView({ group, user, showToast, onGroupUpdated, onLe
   const [editOpen,     setEditOpen]     = useState(false);
   const [editForm,     setEditForm]     = useState({});
   const [busy,         setBusy]         = useState(false);
-  const [showNotif,    setShowNotif]    = useState(false);
+  const [deleting,     setDeleting]     = useState(false);
   const [pendingJoin,  setPendingJoin]  = useState([]);
   const [pendingLib,   setPendingLib]   = useState([]);
   const [pendingPlans, setPendingPlans] = useState([]);
 
-  const isAdmin     = group.members?.[user.uid]?.role === "admin";
-  const members     = group.members || {};
+  const {
+    setCurrentGroupId, setCurrentGroupRole, setCurrentGroupName, setCurrentGroupMembers,
+    setGroupPendingCount, showGroupNotif, setShowGroupNotif,
+  } = useStore();
+
+  const isAdmin   = group.members?.[user.uid]?.role === "admin";
+  const isCreator = group.createdBy === user.uid;
+  const members   = group.members || {};
   const memberCount = Object.keys(members).length;
-  const notifCount  = pendingJoin.length + pendingLib.length + pendingPlans.length;
+
+  useEffect(() => {
+    const role = isCreator ? "creator" : (group.members?.[user.uid]?.role || "member");
+    setCurrentGroupId(group.id);
+    setCurrentGroupRole(role);
+    setCurrentGroupName(group.name);
+    setCurrentGroupMembers(members);
+    return () => {
+      setCurrentGroupId(null); setCurrentGroupRole(null);
+      setCurrentGroupName(""); setCurrentGroupMembers({});
+      setGroupPendingCount(0); setShowGroupNotif(false);
+    };
+  }, [group.id, group.name, user.uid]);
+
+  useEffect(() => {
+    setGroupPendingCount(pendingJoin.length + pendingLib.length + pendingPlans.length);
+  }, [pendingJoin.length, pendingLib.length, pendingPlans.length]);
 
   useEffect(() => {
     let cancelPresence;
@@ -39,12 +63,12 @@ export default function GroupView({ group, user, showToast, onGroupUpdated, onLe
   }, [tab, group.id]);
 
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!isAdmin && !isCreator) return;
     const u1 = listenJoinRequests(group.id, setPendingJoin);
     const u2 = listenGroupPlans(group.id, plans => setPendingPlans(plans.filter(p => !p.approved)));
     const u3 = listenLibraryItems(group.id, items => setPendingLib(items.filter(i => !i.approved)));
     return () => { u1(); u2(); u3(); };
-  }, [group.id, isAdmin]);
+  }, [group.id, isAdmin, isCreator]);
 
   async function handleSaveEdit() {
     if (!editForm.name?.trim()) { showToast("Name required"); return; }
@@ -80,11 +104,19 @@ export default function GroupView({ group, user, showToast, onGroupUpdated, onLe
       .catch(() => showToast(`Invite code: ${code}`));
   }
 
+  async function handleDelete() {
+    if (!confirm(`Delete "${group.name}"? This will permanently delete all members, plans, materials and chat. This cannot be undone.`)) return;
+    setDeleting(true);
+    try { await deleteGroup(group.id, user.uid); onLeave(); }
+    catch (err) { showToast(err.message || "Delete failed"); setDeleting(false); }
+  }
+
   const TABS = ["members", "plans", "library", "chat"];
   const TAB_LABELS = { members: "👤 Members", plans: "📅 Plans", library: "📚 Library", chat: "💬 Chat" };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden" }}>
+      {deleting && <LoadingOverlay message="Deleting group…" />}
 
       <div style={{ background: group.banner || "var(--accent)", padding: "14px 18px", flexShrink: 0 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
@@ -100,16 +132,11 @@ export default function GroupView({ group, user, showToast, onGroupUpdated, onLe
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
             {isAdmin && <TopBtn onClick={openEdit}>✏ Edit</TopBtn>}
-            {isAdmin && (
-              <button onClick={() => setShowNotif(true)}
-                style={{ background: notifCount > 0 ? "rgba(220,38,38,.9)" : "rgba(255,255,255,.2)", color: "white", border: "1px solid rgba(255,255,255,.35)", borderRadius: 6, padding: "6px 11px", fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
-                🔔{notifCount > 0 ? ` ${notifCount}` : ""}
-              </button>
-            )}
             <TopBtn onClick={handleShare}>🔗 Invite</TopBtn>
             {isAdmin && <TopBtn onClick={handleNotify}>📢 Notify</TopBtn>}
             <TopBtn onClick={onRefresh}>↺ Refresh</TopBtn>
             <TopBtn onClick={handleLeave} danger>Leave</TopBtn>
+            {isCreator && <TopBtn onClick={handleDelete} danger>🗑 Delete</TopBtn>}
           </div>
         </div>
       </div>
@@ -130,9 +157,9 @@ export default function GroupView({ group, user, showToast, onGroupUpdated, onLe
         {tab === "chat"    && <GroupChat    group={group} user={user} messages={messages} />}
       </div>
 
-      {showNotif && isAdmin && (
+      {showGroupNotif && (isAdmin || isCreator) && (
         <GroupNotifications groupId={group.id} joinRequests={pendingJoin} pendingPlans={pendingPlans}
-          pendingLibrary={pendingLib} onClose={() => setShowNotif(false)} showToast={showToast}
+          pendingLibrary={pendingLib} onClose={() => setShowGroupNotif(false)} showToast={showToast}
           groupName={group.name} members={members} />
       )}
 
@@ -146,7 +173,7 @@ export default function GroupView({ group, user, showToast, onGroupUpdated, onLe
 
 function GroupAvatar({ group, size }) {
   return group.photoURL
-    ? <img src={group.photoURL} alt="" style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(255,255,255,.4)", flexShrink: 0 }} />
+    ? <img src={group.photoURL} alt="" loading="lazy" style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(255,255,255,.4)", flexShrink: 0 }} />
     : <div style={{ width: size, height: size, borderRadius: "50%", background: "rgba(255,255,255,.25)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.38, color: "white", fontWeight: 700, border: "2px solid rgba(255,255,255,.4)", flexShrink: 0 }}>{(group.name || "G").charAt(0).toUpperCase()}</div>;
 }
 
