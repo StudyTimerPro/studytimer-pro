@@ -144,11 +144,13 @@ export function listenChat(gid, cb) {
   return () => off(r);
 }
 
-export function sendMessage(gid, uid, user, text) {
-  return push(ref(db, `groupChat/${gid}/messages`), {
+export function sendMessage(gid, uid, user, text, mentions = []) {
+  const payload = {
     uid, name: user.displayName || "User",
     photo: user.photoURL || "", text: text.trim(), createdAt: Date.now(),
-  });
+  };
+  if (mentions.length) payload.mentions = mentions;
+  return push(ref(db, `groupChat/${gid}/messages`), payload);
 }
 
 export function notifyAll(gid, senderName) {

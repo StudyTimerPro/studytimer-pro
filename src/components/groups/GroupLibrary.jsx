@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
-import { uploadAndSaveLibraryItem, listenLibraryItems, approveLibraryItem, incrementViewCount, removeMaterial } from "../../firebase/groupsLibrary";
+import { uploadAndSaveLibraryItem, listenLibraryItems, approveLibraryItem, incrementViewCount, incrementDownloadCount, removeMaterial } from "../../firebase/groupsLibrary";
 import { toggleLikeMaterial, pinMaterial } from "../../firebase/groupsEngagement";
 import GroupLibraryCard from "./GroupLibraryCard";
 
@@ -57,6 +57,21 @@ export default function GroupLibrary({ groupId, user, isAdmin, showToast }) {
     window.open(item.url, "_blank", "noopener,noreferrer");
   }
 
+  async function handleDownload(item) {
+    try { await incrementDownloadCount(groupId, item.id); } catch {}
+    try {
+      const res  = await fetch(item.url);
+      const blob = await res.blob();
+      const a    = document.createElement("a");
+      a.href     = URL.createObjectURL(blob);
+      a.download = item.name || "download";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch {
+      window.open(item.url, "_blank", "noopener,noreferrer");
+    }
+  }
+
   async function handleLike(item) {
     try { await toggleLikeMaterial(groupId, item.id, user.uid); }
     catch { showToast("Failed to like"); }
@@ -102,6 +117,7 @@ export default function GroupLibrary({ groupId, user, isAdmin, showToast }) {
         {items.map(item => (
           <GroupLibraryCard key={item.id} item={item} uid={user.uid} isAdmin={isAdmin}
             onView={() => handleView(item)}
+            onDownload={() => handleDownload(item)}
             onLike={() => handleLike(item)}
             onPin={() => handlePin(item)}
             onApprove={() => handleApprove(item.id)}

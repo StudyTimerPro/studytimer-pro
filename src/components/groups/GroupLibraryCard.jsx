@@ -7,8 +7,9 @@ function fileIcon(type) {
   return "🔗";
 }
 
-export default function GroupLibraryCard({ item, uid, isAdmin, onView, onLike, onPin, onApprove, onRemove }) {
+export default function GroupLibraryCard({ item, uid, isAdmin, onView, onDownload, onLike, onPin, onApprove, onRemove }) {
   const liked = !!(item.likes?.[uid]);
+  const isFile = item.type !== "link";
 
   return (
     <div
@@ -36,9 +37,9 @@ export default function GroupLibraryCard({ item, uid, isAdmin, onView, onLike, o
         <span style={{ fontSize: 11, color: "var(--ink2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.uploadedByName}</span>
       </div>
 
-      <div style={{ fontSize: 11, color: "var(--ink2)", display: "flex", gap: 6, flexWrap: "wrap" }}>
-        <span>{new Date(item.createdAt).toLocaleDateString()}</span>
+      <div style={{ fontSize: 11, color: "var(--ink2)", display: "flex", gap: 8, flexWrap: "wrap" }}>
         <span>👁 {item.viewCount || 0}</span>
+        <span>📥 {item.downloadCount || 0}</span>
         <span>❤️ {item.likeCount || 0}</span>
       </div>
 
@@ -46,8 +47,9 @@ export default function GroupLibraryCard({ item, uid, isAdmin, onView, onLike, o
         <button onClick={onLike} style={{ ...smBtn, background: liked ? "#fde8e8" : "var(--bg)", color: liked ? "#e63946" : "var(--ink2)" }}>
           {liked ? "❤️" : "🤍"}
         </button>
-        <button onClick={onView} style={{ ...smBtn, flex: 1, justifyContent: "center", background: "#eaf0fb", color: "#2563eb" }}>
-          {item.type === "link" ? "🔗 Visit" : "⬇ View"}
+        <button onClick={isFile ? onDownload : onView}
+          style={{ ...smBtn, flex: 1, justifyContent: "center", background: "#eaf0fb", color: "#2563eb" }}>
+          {isFile ? "📥 Download" : "🔗 Visit"}
         </button>
         {isAdmin && !item.approved && (
           <button onClick={onApprove} style={{ ...smBtn, background: "#eaf0fb", color: "#2563eb" }}>✓</button>

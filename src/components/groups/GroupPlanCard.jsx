@@ -1,9 +1,9 @@
 import React from "react";
 
-export default function GroupPlanCard({ plan, uid, isAdmin, onLike, onEnroll, onApprove, onPin, onRemove }) {
-  const sessions = Array.isArray(plan.sessions) ? plan.sessions : Object.values(plan.sessions || {});
-  const liked    = !!(plan.likes?.[uid]);
-  const enrolled = !!(plan.enrollments?.[uid]);
+export default function GroupPlanCard({ plan, uid, isAdmin, onLike, onEnroll, onApprove, onPin, onRemove, onViewSessions }) {
+  const sessions  = Array.isArray(plan.sessions) ? plan.sessions : Object.values(plan.sessions || {});
+  const liked     = !!(plan.likes?.[uid]);
+  const enrolled  = !!(plan.enrollments?.[uid]);
   const isPending = !plan.approved;
 
   return (
@@ -39,6 +39,7 @@ export default function GroupPlanCard({ plan, uid, isAdmin, onLike, onEnroll, on
           style={{ ...smBtn, background: liked ? "#fde8e8" : "var(--bg)", color: liked ? "#e63946" : "var(--ink2)" }}>
           {liked ? "❤️" : "🤍"}
         </button>
+        <button onClick={onViewSessions} style={{ ...smBtn, background: "var(--bg)", color: "var(--ink2)" }}>👁 View</button>
         <button onClick={onEnroll} disabled={enrolled || isPending}
           style={{ ...smBtn, flex: 1, justifyContent: "center", background: enrolled ? "#d1fae5" : isPending ? "var(--bg)" : "#eaf0fb", color: enrolled ? "#059669" : isPending ? "var(--ink2)" : "#2563eb", cursor: enrolled || isPending ? "default" : "pointer" }}>
           {enrolled ? "✅ Enrolled" : "➕ Enroll"}

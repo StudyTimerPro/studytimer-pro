@@ -3,22 +3,24 @@ import { useAuth } from "../../hooks/useAuth";
 import useStore from "../../store/useStore";
 import { loadMemberPlans, listenGroupPlans, approveGroupPlan } from "../../firebase/groupsDb";
 import { enrollInPlan, toggleLikePlan, pinPlan, removePlan } from "../../firebase/groupsEngagement";
-import { savePlanToExam } from "../../firebase/db";
+import { savePlanToExam, saveExam } from "../../firebase/db";
 import GroupPlanCard from "./GroupPlanCard";
+import PlanSessionsModal from "./PlanSessionsModal";
 
 const GRID_CSS = `
 .gp-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
 @media (max-width: 640px) { .gp-grid { grid-template-columns: 1fr; } }
 `;
 
-export default function GroupPlans({ members, groupId, isAdmin, user: userProp }) {
-  const { user: authUser }           = useAuth();
-  const user                         = userProp || authUser;
-  const { currentExamId, showToast } = useStore();
-  const [memberPlans, setMemberPlans] = useState([]);
-  const [groupPlans,  setGroupPlans]  = useState([]);
-  const [loadingM,    setLoadingM]    = useState(true);
-  const [busy,        setBusy]        = useState(null);
+export default function GroupPlans({ members, groupId, groupName, isAdmin, user: userProp }) {
+  const { user: authUser }                                          = useAuth();
+  const user                                                        = userProp || authUser;
+  const { currentExamId, currentExamName, setCurrentExamId, setCurrentExamName, setExams, exams, showToast } = useStore();
+  const [memberPlans,  setMemberPlans]  = useState([]);
+  const [groupPlans,   setGroupPlans]   = useState([]);
+  const [loadingM,     setLoadingM]     = useState(true);
+  const [busy,         setBusy]         = useState(null);
+  const [viewingPlan,  setViewingPlan]  = useState(null);
 
   useEffect(() => {
     setLoadingM(true);
@@ -33,17 +35,28 @@ export default function GroupPlans({ members, groupId, isAdmin, user: userProp }
     }));
   }), [groupId]);
 
+  async function resolveExam() {
+    if (currentExamId) return { examId: currentExamId, examName: currentExamName || "Exam" };
+    const name   = groupName || "Group Study";
+    const examId = await saveExam(user.uid, { name });
+    const updated = [...exams, { id: examId, name, createdAt: Date.now() }];
+    setCurrentExamId(examId);
+    setCurrentExamName(name);
+    setExams(updated);
+    return { examId, examName: name };
+  }
+
   async function handleEnroll(plan) {
-    if (!currentExamId) { showToast("Select an exam first"); return; }
     const sessions = Array.isArray(plan.sessions) ? plan.sessions : Object.values(plan.sessions || {});
     if (!sessions.length) { showToast("No sessions in this plan"); return; }
     setBusy(plan.id);
     try {
+      const { examId, examName } = await resolveExam();
       await Promise.all([
         enrollInPlan(groupId, plan.id, user.uid),
-        savePlanToExam(user.uid, currentExamId, plan.name, sessions),
+        savePlanToExam(user.uid, examId, plan.name, sessions),
       ]);
-      showToast(`Enrolled in "${plan.name}" ✓`);
+      showToast(`Plan enrolled under ${examName}!`);
     } catch { showToast("Failed to enroll"); }
     finally { setBusy(null); }
   }
@@ -70,12 +83,12 @@ export default function GroupPlans({ members, groupId, isAdmin, user: userProp }
   }
 
   async function handleAddMember(name, sessions) {
-    if (!currentExamId) { showToast("Select an exam first"); return; }
     const key = "m_" + name;
     setBusy(key);
     try {
-      await savePlanToExam(user.uid, currentExamId, `${name}'s Plan`, sessions.map(({ id, ...r }) => r));
-      showToast(`Added "${name}'s Plan" ✓`);
+      const { examId, examName } = await resolveExam();
+      await savePlanToExam(user.uid, examId, `${name}'s Plan`, sessions.map(({ id, ...r }) => r));
+      showToast(`Added "${name}'s Plan" under ${examName} ✓`);
     } catch { showToast("Failed"); }
     finally { setBusy(null); }
   }
@@ -99,6 +112,7 @@ export default function GroupPlans({ members, groupId, isAdmin, user: userProp }
               onApprove={() => handleApprove(plan.id)}
               onPin={() => handlePin(plan)}
               onRemove={() => handleRemove(plan.id)}
+              onViewSessions={() => setViewingPlan(plan)}
             />
           ))}
         </div>
@@ -107,7 +121,7 @@ export default function GroupPlans({ members, groupId, isAdmin, user: userProp }
       <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 10, color: "var(--ink)" }}>👥 Members' Today Plans</h3>
       {loadingM && <p style={{ color: "var(--ink2)", fontSize: 13 }}>Loading...</p>}
       {!loadingM && memberPlans.map(({ uid, name, photo, sessions }) => {
-        const key = "m_" + name;
+        const key    = "m_" + name;
         const sorted = sessions.slice().sort((a, b) => (a.start || "").localeCompare(b.start || ""));
         return (
           <div key={uid} style={{ background: "var(--surface)", borderRadius: 10, padding: "12px 14px", marginBottom: 10, border: "1px solid var(--border)" }}>
@@ -135,6 +149,16 @@ export default function GroupPlans({ members, groupId, isAdmin, user: userProp }
           </div>
         );
       })}
+
+      {viewingPlan && (
+        <PlanSessionsModal
+          plan={viewingPlan}
+          onClose={() => setViewingPlan(null)}
+          onEnroll={() => { handleEnroll(viewingPlan); setViewingPlan(null); }}
+          enrolled={!!(viewingPlan.enrollments?.[user.uid])}
+          enrollBusy={busy === viewingPlan.id}
+        />
+      )}
     </div>
   );
 }
@@ -149,7 +173,7 @@ function Initials({ name, size }) {
 
 function fmt12(t) {
   if (!t) return "—";
-  let [h, m] = t.split(":").map(Number);
-  const ap = h >= 12 ? "PM" : "AM"; h = h % 12 || 12;
-  return `${h}:${String(m).padStart(2, "0")} ${ap}`;
+  const [h, m] = t.split(":").map(Number);
+  const ap = h >= 12 ? "PM" : "AM";
+  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${ap}`;
 }

@@ -26,7 +26,7 @@ export async function uploadAndSaveLibraryItem(groupId, uid, userName, { file, l
     type = "link";
   }
   const r = push(dbRef(db, `groups/${groupId}/library`));
-  await set(r, { name, type, url, storagePath, uploadedBy: uid, uploadedByName: userName, viewCount: 0, likeCount: 0, approved: isAdmin, pinned: false, createdAt: Date.now() });
+  await set(r, { name, type, url, storagePath, uploadedBy: uid, uploadedByName: userName, viewCount: 0, downloadCount: 0, likeCount: 0, approved: isAdmin, pinned: false, createdAt: Date.now() });
   return r.key;
 }
 
@@ -62,6 +62,12 @@ export async function removeMaterial(groupId, itemId) {
 
 export async function incrementViewCount(groupId, itemId) {
   const r = dbRef(db, `groups/${groupId}/library/${itemId}/viewCount`);
+  const snap = await get(r);
+  await set(r, (snap.val() || 0) + 1);
+}
+
+export async function incrementDownloadCount(groupId, itemId) {
+  const r = dbRef(db, `groups/${groupId}/library/${itemId}/downloadCount`);
   const snap = await get(r);
   await set(r, (snap.val() || 0) + 1);
 }

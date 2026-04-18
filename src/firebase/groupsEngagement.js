@@ -1,5 +1,5 @@
 import { db } from "./config";
-import { ref, set, get, update, remove } from "firebase/database";
+import { ref, set, get, update, remove, onValue, off } from "firebase/database";
 
 async function toggleCount(likeRef, countRef) {
   const [snap, countSnap] = await Promise.all([get(likeRef), get(countRef)]);
@@ -42,4 +42,23 @@ export async function enrollInPlan(groupId, planId, uid) {
 
 export function removePlan(groupId, planId) {
   return remove(ref(db, `groups/${groupId}/plans/${planId}`));
+}
+
+export async function toggleMemberLike(groupId, targetUid, fromUid) {
+  const r = ref(db, `groups/${groupId}/memberLikes/${targetUid}/${fromUid}`);
+  const snap = await get(r);
+  if (snap.exists()) await remove(r);
+  else await set(r, true);
+}
+
+export function listenMemberLikes(groupId, targetUid, callback) {
+  const r = ref(db, `groups/${groupId}/memberLikes/${targetUid}`);
+  onValue(r, snap => callback(snap.val() || {}));
+  return () => off(r);
+}
+
+export function listenAllMemberLikes(groupId, callback) {
+  const r = ref(db, `groups/${groupId}/memberLikes`);
+  onValue(r, snap => callback(snap.val() || {}));
+  return () => off(r);
 }

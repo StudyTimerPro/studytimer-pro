@@ -50,7 +50,7 @@ export default function GroupView({ group, user, showToast, onGroupUpdated, onLe
     if (!editForm.name?.trim()) { showToast("Name required"); return; }
     setBusy(true);
     try {
-      const updates = { name: editForm.name.trim(), description: editForm.description || "", banner: editForm.banner || group.banner, icon: editForm.icon || group.icon || "📚" };
+      const updates = { name: editForm.name.trim(), description: editForm.description || "", banner: editForm.banner || group.banner, photoURL: editForm.photoURL || group.photoURL || "" };
       await updateGroup(group.id, updates);
       onGroupUpdated({ id: group.id, ...updates });
       setEditOpen(false); showToast("Group updated!");
@@ -59,7 +59,7 @@ export default function GroupView({ group, user, showToast, onGroupUpdated, onLe
   }
 
   function openEdit() {
-    setEditForm({ name: group.name, description: group.description || "", banner: group.banner || "#2d6a4f", icon: group.icon || "📚" });
+    setEditForm({ name: group.name, description: group.description || "", banner: group.banner || "#2d6a4f", photoURL: group.photoURL || "" });
     setEditOpen(true);
   }
 
@@ -88,13 +88,14 @@ export default function GroupView({ group, user, showToast, onGroupUpdated, onLe
 
       <div style={{ background: group.banner || "var(--accent)", padding: "14px 18px", flexShrink: 0 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 19, color: "white", lineHeight: 1.2 }}>
-              {group.icon || "📚"} {group.name}
-            </div>
-            {group.description && <div style={{ fontSize: 12, color: "rgba(255,255,255,.8)", marginTop: 3 }}>{group.description}</div>}
-            <div style={{ fontSize: 12, color: "rgba(255,255,255,.7)", marginTop: 5 }}>
-              {memberCount} member{memberCount !== 1 ? "s" : ""} &nbsp;·&nbsp; 🟢 {onlineUids.size} online
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <GroupAvatar group={group} size={60} />
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 19, color: "white", lineHeight: 1.2 }}>{group.name}</div>
+              {group.description && <div style={{ fontSize: 12, color: "rgba(255,255,255,.8)", marginTop: 3 }}>{group.description}</div>}
+              <div style={{ fontSize: 12, color: "rgba(255,255,255,.7)", marginTop: 5 }}>
+                {memberCount} member{memberCount !== 1 ? "s" : ""} &nbsp;·&nbsp; 🟢 {onlineUids.size} online
+              </div>
             </div>
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
@@ -124,7 +125,7 @@ export default function GroupView({ group, user, showToast, onGroupUpdated, onLe
 
       <div style={{ flex: 1, overflow: tab === "chat" ? "hidden" : "auto", display: "flex", flexDirection: "column", padding: tab === "chat" ? 0 : 16 }}>
         {tab === "members" && <GroupMembers members={members} onlineUids={onlineUids} user={user} group={group} isAdmin={isAdmin} showToast={showToast} onGroupUpdated={onGroupUpdated} />}
-        {tab === "plans"   && <GroupPlans   members={members} groupId={group.id} isAdmin={isAdmin} user={user} />}
+        {tab === "plans"   && <GroupPlans   members={members} groupId={group.id} groupName={group.name} isAdmin={isAdmin} user={user} />}
         {tab === "library" && <GroupLibrary groupId={group.id} user={user} isAdmin={isAdmin} showToast={showToast} />}
         {tab === "chat"    && <GroupChat    group={group} user={user} messages={messages} />}
       </div>
@@ -135,11 +136,17 @@ export default function GroupView({ group, user, showToast, onGroupUpdated, onLe
       )}
 
       {editOpen && (
-        <GroupEditModal editForm={editForm} setEditForm={setEditForm}
+        <GroupEditModal groupId={group.id} editForm={editForm} setEditForm={setEditForm}
           onClose={() => setEditOpen(false)} onSave={handleSaveEdit} busy={busy} />
       )}
     </div>
   );
+}
+
+function GroupAvatar({ group, size }) {
+  return group.photoURL
+    ? <img src={group.photoURL} alt="" style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(255,255,255,.4)", flexShrink: 0 }} />
+    : <div style={{ width: size, height: size, borderRadius: "50%", background: "rgba(255,255,255,.25)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.38, color: "white", fontWeight: 700, border: "2px solid rgba(255,255,255,.4)", flexShrink: 0 }}>{(group.name || "G").charAt(0).toUpperCase()}</div>;
 }
 
 function TopBtn({ onClick, children, danger }) {
