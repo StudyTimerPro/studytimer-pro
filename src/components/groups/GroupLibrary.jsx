@@ -110,29 +110,13 @@ export default function GroupLibrary({ groupId, user, isAdmin, showToast }) {
         {uploading && <LoadingOverlay message="Uploading…" />}
         <h4 style={{ fontWeight: 700, fontSize: 14, marginBottom: 10, color: "var(--ink)" }}>📤 Add Material</h4>
 
-        {!pendingFile ? (
-          <div style={{ marginBottom: 8 }}>
-            <input ref={fileRef} type="file" accept={ALLOWED_EXT.join(",")} style={{ display: "none" }} onChange={handleFileSelect} />
-            <button onClick={() => { setSizeError(""); fileRef.current?.click(); }} disabled={uploading} style={upBtn}>
-              📎 Upload File (PDF / TXT / Image, max 20MB)
-            </button>
-            {sizeError && <div style={{ color: "#e63946", fontSize: 12, marginTop: 6 }}>⚠ {sizeError}</div>}
-          </div>
-        ) : (
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 12, color: "var(--ink2)", marginBottom: 6 }}>
-              📄 {pendingFile.name} &bull; {(pendingFile.size / 1024 / 1024).toFixed(2)} MB
-            </div>
-            <input value={pendingName} onChange={e => setPendingName(e.target.value)} placeholder="Display name..."
-              style={{ ...inputS, marginBottom: 8 }} />
-            <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={handleConfirmUpload} disabled={!pendingName.trim() || uploading} style={{ ...upBtn, background: "var(--accent)", color: "white", border: "none" }}>
-                ✓ Upload
-              </button>
-              <button onClick={() => { setPendingFile(null); setPendingName(""); }} style={upBtn}>✕ Cancel</button>
-            </div>
-          </div>
-        )}
+        <div style={{ marginBottom: 8 }}>
+          <input ref={fileRef} type="file" accept={ALLOWED_EXT.join(",")} style={{ display: "none" }} onChange={handleFileSelect} />
+          <button onClick={() => { setSizeError(""); fileRef.current?.click(); }} disabled={uploading} style={upBtn}>
+            📎 Upload File (PDF / TXT / Image, max 20MB)
+          </button>
+          {sizeError && <div style={{ color: "#e63946", fontSize: 12, marginTop: 6 }}>⚠ {sizeError}</div>}
+        </div>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <input value={linkName} onChange={e => setLinkName(e.target.value)} placeholder="Link name (optional)" style={{ ...inputS, flex: "0 0 150px" }} />
@@ -140,6 +124,34 @@ export default function GroupLibrary({ groupId, user, isAdmin, showToast }) {
           <button onClick={handleLinkUpload} disabled={uploading} style={upBtn}>🔗 Add Link</button>
         </div>
       </div>
+
+      {pendingFile && (
+        <div onClick={e => e.target === e.currentTarget && (setPendingFile(null), setPendingName(""))}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.5)", zIndex: 500, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ background: "var(--surface)", borderRadius: 16, padding: "24px 22px", width: "min(380px,100%)", boxShadow: "0 20px 60px rgba(0,0,0,.25)", position: "relative" }}>
+            <button onClick={() => { setPendingFile(null); setPendingName(""); }}
+              style={{ position: "absolute", top: 12, right: 14, background: "none", border: "none", fontSize: 18, cursor: "pointer", color: "var(--ink2)", lineHeight: 1, padding: 4 }}>✕</button>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--ink)", marginBottom: 16 }}>📎 Upload File</h3>
+            <div style={{ fontSize: 12, color: "var(--ink2)", marginBottom: 14, padding: "8px 10px", background: "var(--bg)", borderRadius: 8, border: "1px solid var(--border)" }}>
+              📄 {pendingFile.name} &bull; {(pendingFile.size / 1024 / 1024).toFixed(2)} MB
+            </div>
+            <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--ink2)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 }}>Display Name</label>
+            <input value={pendingName} onChange={e => setPendingName(e.target.value)} placeholder="Enter a name for this file..."
+              autoFocus style={{ ...inputS, marginBottom: 18 }}
+              onKeyDown={e => e.key === "Enter" && handleConfirmUpload()} />
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => { setPendingFile(null); setPendingName(""); }}
+                style={{ background: "none", border: "1.5px solid var(--border)", borderRadius: 10, padding: "10px 18px", fontSize: 14, cursor: "pointer", color: "var(--ink2)" }}>
+                Cancel
+              </button>
+              <button onClick={handleConfirmUpload} disabled={!pendingName.trim() || uploading}
+                style={{ flex: 1, background: !pendingName.trim() || uploading ? "var(--border)" : "var(--accent)", color: "white", border: "none", borderRadius: 10, padding: "10px 18px", fontSize: 14, fontWeight: 600, cursor: !pendingName.trim() || uploading ? "not-allowed" : "pointer" }}>
+                {uploading ? "Uploading…" : "Upload"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {items.length === 0 && <p style={{ color: "var(--ink2)", fontSize: 13 }}>No materials yet. Be the first to share!</p>}
       <div className="gl-grid">

@@ -8,8 +8,8 @@ import { LoadingOverlay } from "../common/LoadingAnimation";
 import PlanSessionsModal from "./PlanSessionsModal";
 
 const CSS = `
-.gp-stats { display: flex; gap: 10px; }
-@media (max-width: 640px) { .gp-stats { display: none !important; } }
+.gp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+@media (max-width: 640px) { .gp-grid { grid-template-columns: repeat(2, 1fr); } }
 `;
 
 export default function GroupPlans({ members, groupId, groupName, isAdmin, user: userProp }) {
@@ -100,18 +100,20 @@ export default function GroupPlans({ members, groupId, groupName, isAdmin, user:
       )}
 
       {groupPlans.length > 0 && (
-        <div style={{ position: "relative", border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden", marginBottom: 24 }}>
+        <div style={{ position: "relative", marginBottom: 24 }}>
           {busy && <LoadingOverlay message="Enrolling…" size={50} />}
-          {groupPlans.map(plan => (
-            <PlanRow key={plan.id} plan={plan} uid={user.uid} isAdmin={isAdmin} enrollBusy={busy === plan.id}
-              onView={() => handleViewSessions(plan)}
-              onLike={() => handleLike(plan)}
-              onEnroll={() => busy !== plan.id && handleEnroll(plan)}
-              onApprove={() => handleApprove(plan.id)}
-              onPin={() => handlePin(plan)}
-              onRemove={() => handleRemove(plan.id)}
-            />
-          ))}
+          <div className="gp-grid">
+            {groupPlans.map(plan => (
+              <PlanCard key={plan.id} plan={plan} uid={user.uid} isAdmin={isAdmin} enrollBusy={busy === plan.id}
+                onView={() => handleViewSessions(plan)}
+                onLike={() => handleLike(plan)}
+                onEnroll={() => busy !== plan.id && handleEnroll(plan)}
+                onApprove={() => handleApprove(plan.id)}
+                onPin={() => handlePin(plan)}
+                onRemove={() => handleRemove(plan.id)}
+              />
+            ))}
+          </div>
         </div>
       )}
 
@@ -156,39 +158,67 @@ export default function GroupPlans({ members, groupId, groupName, isAdmin, user:
   );
 }
 
-function PlanRow({ plan, uid, isAdmin, enrollBusy, onView, onLike, onEnroll, onApprove, onPin, onRemove }) {
-  const sessions  = Array.isArray(plan.sessions) ? plan.sessions : Object.values(plan.sessions || {});
-  const liked     = !!(plan.likes?.[uid]);
-  const enrolled  = !!(plan.enrollments?.[uid]);
+function PlanCard({ plan, uid, isAdmin, enrollBusy, onView, onLike, onEnroll, onApprove, onPin, onRemove }) {
+  const sessions = Array.isArray(plan.sessions) ? plan.sessions : Object.values(plan.sessions || {});
+  const liked    = !!(plan.likes?.[uid]);
+  const enrolled = !!(plan.enrollments?.[uid]);
   const isPending = !plan.approved;
+
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderBottom: "1px solid var(--border)", background: "var(--surface)", minHeight: 56, flexWrap: "wrap" }}>
-      {plan.pinned && <span style={{ fontSize: 13, flexShrink: 0 }}>📌</span>}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 600, fontSize: 13, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{plan.name}</div>
-        <div style={{ fontSize: 11, color: "var(--ink2)" }}>{plan.sharedByName || "Unknown"}</div>
+    <div
+      style={{ background: "var(--surface)", borderRadius: 14, border: "1px solid var(--border)", padding: "14px 12px", position: "relative", display: "flex", flexDirection: "column", gap: 8, boxShadow: "0 1px 6px rgba(0,0,0,.05)", transition: "box-shadow .15s" }}
+      onMouseEnter={e => e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,.12)"}
+      onMouseLeave={e => e.currentTarget.style.boxShadow = "0 1px 6px rgba(0,0,0,.05)"}
+    >
+      {plan.pinned && <div style={{ position: "absolute", top: 8, right: 8, fontSize: 14, lineHeight: 1 }}>📌</div>}
+
+      <div style={{ textAlign: "center", fontSize: 44, lineHeight: 1, paddingTop: 4 }}>📋</div>
+
+      <div>
+        <div style={{ fontWeight: 700, fontSize: 13, color: "var(--ink)", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", lineHeight: 1.3, marginBottom: 4 }}>
+          {plan.name}
+        </div>
+        <span style={{ fontSize: 10, fontWeight: 700, background: isPending ? "#fef3c7" : "#d1fae5", color: isPending ? "#d97706" : "#059669", borderRadius: 4, padding: "1px 5px" }}>
+          {isPending ? "⏳ Pending" : "✓ Approved"}
+        </span>
       </div>
-      <div className="gp-stats" style={{ fontSize: 12, color: "var(--ink2)", flexShrink: 0 }}>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <div style={{ width: 22, height: 22, borderRadius: "50%", background: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "white", fontWeight: 700, flexShrink: 0 }}>
+          {(plan.sharedByName || "?").charAt(0).toUpperCase()}
+        </div>
+        <span style={{ fontSize: 11, color: "var(--ink2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{plan.sharedByName || "Unknown"}</span>
+      </div>
+
+      <div style={{ fontSize: 11, color: "var(--ink2)", display: "flex", gap: 8, flexWrap: "wrap" }}>
         <span>📋 {sessions.length}</span>
         <span>👥 {plan.enrollCount || 0}</span>
         <span>❤️ {plan.likeCount || 0}</span>
         <span>👁 {plan.viewCount || 0}</span>
       </div>
-      <span style={{ fontSize: 10, fontWeight: 700, background: isPending ? "#fef3c7" : "#d1fae5", color: isPending ? "#d97706" : "#059669", borderRadius: 4, padding: "2px 6px", whiteSpace: "nowrap", flexShrink: 0 }}>
-        {isPending ? "⏳ Pending" : "✓ Approved"}
-      </span>
-      <div style={{ display: "flex", gap: 3, flexShrink: 0, flexWrap: "wrap" }}>
-        <button onClick={onView} style={rb}>👁</button>
-        <button onClick={onLike} style={{ ...rb, color: liked ? "#e63946" : "var(--ink2)" }}>{liked ? "❤️" : "🤍"}</button>
+
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", borderTop: "1px solid var(--border)", paddingTop: 8, marginTop: "auto" }}>
+        <button onClick={onLike} style={{ ...smBtn, background: liked ? "#fde8e8" : "var(--bg)", color: liked ? "#e63946" : "var(--ink2)" }}>
+          {liked ? "❤️" : "🤍"}
+        </button>
+        <button onClick={onView} style={{ ...smBtn, background: "#f0f4ff", color: "#4f46e5" }}>
+          👁 View
+        </button>
         <button onClick={onEnroll} disabled={enrolled || isPending || enrollBusy}
-          style={{ ...rb, background: enrolled ? "#d1fae5" : !plan.approved ? "var(--bg)" : "var(--accent)", color: enrolled ? "#059669" : !plan.approved ? "var(--ink2)" : "white" }}>
+          style={{ ...smBtn, background: enrolled ? "#d1fae5" : isPending ? "var(--bg)" : "var(--accent)", color: enrolled ? "#059669" : isPending ? "var(--ink2)" : "white", border: enrolled || isPending ? "1px solid var(--border)" : "none", opacity: enrollBusy ? 0.6 : 1 }}>
           {enrollBusy ? "…" : enrolled ? "✅" : "➕ Enroll"}
         </button>
-        {isAdmin && isPending && <button onClick={onApprove} style={{ ...rb, background: "#d1fae5", color: "#059669" }}>✓</button>}
-        {isAdmin && <>
-          <button onClick={onPin} style={{ ...rb, color: plan.pinned ? "#d97706" : "var(--ink2)" }}>📍</button>
-          <button onClick={onRemove} style={{ ...rb, background: "#fde8e8", color: "#e63946" }}>🗑</button>
-        </>}
+        {isAdmin && isPending && (
+          <button onClick={onApprove} style={{ ...smBtn, background: "#d1fae5", color: "#059669" }}>✓</button>
+        )}
+        {isAdmin && (
+          <>
+            <button onClick={onPin} style={{ ...smBtn, background: plan.pinned ? "#fef3c7" : "var(--bg)", color: plan.pinned ? "#d97706" : "var(--ink2)" }}>
+              {plan.pinned ? "📌" : "📍"}
+            </button>
+            <button onClick={onRemove} style={{ ...smBtn, background: "#fde8e8", color: "#e63946" }}>🗑</button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -204,4 +234,4 @@ function fmt12(t) {
   return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
 }
 
-const rb = { border: "1px solid var(--border)", borderRadius: 6, padding: "4px 7px", fontSize: 11, fontWeight: 600, cursor: "pointer", background: "var(--bg)", color: "var(--ink2)" };
+const smBtn = { border: "1px solid var(--border)", borderRadius: 6, padding: "4px 7px", fontSize: 11, fontWeight: 600, cursor: "pointer", background: "var(--bg)", color: "var(--ink2)", display: "flex", alignItems: "center", gap: 2 };
