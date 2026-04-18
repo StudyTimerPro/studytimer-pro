@@ -148,21 +148,23 @@ export function listenChat(gid, cb) {
   return () => off(r);
 }
 
-export function sendMessage(gid, uid, user, text, mentions = []) {
+export function sendMessage(gid, uid, user, text, mentions = [], type = null) {
   const payload = {
     uid, name: user.displayName || "User",
     photo: user.photoURL || "", text: text.trim(), createdAt: Date.now(),
   };
   if (mentions.length) payload.mentions = mentions;
+  if (type) payload.type = type;
   return push(ref(db, `groupChat/${gid}/messages`), payload);
 }
 
-export function notifyAll(gid, senderName) {
-  return push(ref(db, `groupChat/${gid}/messages`), {
-    uid: "system", name: "System",
-    text: `📢 ${senderName} sent a notification to all members.`,
-    createdAt: Date.now(),
-  });
+// ── Pinned messages ──────────────────────────────────────────
+export const setPinnedMessage = (gid, data) => set(ref(db, `groupChat/${gid}/pinnedMessage`), data);
+export const removePinnedMessage = gid => remove(ref(db, `groupChat/${gid}/pinnedMessage`));
+export function listenPinnedMessage(gid, cb) {
+  const r = ref(db, `groupChat/${gid}/pinnedMessage`);
+  onValue(r, s => cb(s.val() || null));
+  return () => off(r);
 }
 
 // ── Search all groups ────────────────────────────────────────────────

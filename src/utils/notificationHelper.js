@@ -35,11 +35,12 @@ export async function notifyAnnouncement(memberUids, title, message, groupName, 
   ));
 }
 
-export async function notifyLike(ownerUid, fromName, contentName) {
-  await saveInAppNotification(ownerUid, {
+export async function notifyLike(targetUid, fromName, groupName, groupId) {
+  await saveInAppNotification(targetUid, {
     type: "like",
-    title: `❤️ ${fromName} liked your content`,
-    message: contentName,
+    title: "❤️ New Like",
+    message: `${fromName} liked your profile in ${groupName}`,
+    groupId,
     fromName,
   }).catch(() => {});
 }

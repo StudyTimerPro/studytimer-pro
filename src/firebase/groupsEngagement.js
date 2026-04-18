@@ -1,5 +1,6 @@
 import { db } from "./config";
 import { ref, set, get, update, remove, onValue, off } from "firebase/database";
+import { notifyLike } from "../utils/notificationHelper";
 
 async function toggleCount(likeRef, countRef) {
   const [snap, countSnap] = await Promise.all([get(likeRef), get(countRef)]);
@@ -50,11 +51,17 @@ export async function incrementPlanViewCount(groupId, planId) {
   await set(r, (snap.val() || 0) + 1);
 }
 
-export async function toggleMemberLike(groupId, targetUid, fromUid) {
+export async function toggleMemberLike(groupId, targetUid, fromUid, fromName, groupName) {
   const r = ref(db, `groups/${groupId}/memberLikes/${targetUid}/${fromUid}`);
   const snap = await get(r);
-  if (snap.exists()) await remove(r);
-  else await set(r, true);
+  if (snap.exists()) {
+    await remove(r);
+  } else {
+    await set(r, true);
+    if (fromUid !== targetUid) {
+      notifyLike(targetUid, fromName || "Someone", groupName || "the group", groupId).catch(() => {});
+    }
+  }
 }
 
 export function listenMemberLikes(groupId, targetUid, callback) {

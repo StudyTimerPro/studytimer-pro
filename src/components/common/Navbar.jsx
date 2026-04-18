@@ -117,7 +117,7 @@ function ProfileAvatar({ user, onClick }) {
     .slice(0, 2);
 
   return (
-    <div onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+    <div onClick={onClick} style={{ cursor: "pointer" }}>
       <div
         title={name}
         style={{
@@ -149,9 +149,6 @@ function ProfileAvatar({ user, onClick }) {
           initials
         )}
       </div>
-      <span style={{ fontSize: 14, opacity: 0.9, maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {name}
-      </span>
     </div>
   );
 }

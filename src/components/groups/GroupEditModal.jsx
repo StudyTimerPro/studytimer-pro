@@ -6,7 +6,7 @@ import { LoadingOverlay } from "../common/LoadingAnimation";
 
 const BANNERS = ["#2d6a4f","#2563eb","#7c3aed","#dc2626","#d97706","#0891b2","#1a1814","#db2777"];
 
-export default function GroupEditModal({ groupId, editForm, setEditForm, onClose, onSave, busy }) {
+export default function GroupEditModal({ groupId, editForm, setEditForm, onClose, onSave, busy, onDelete }) {
   const [photoUploading, setPhotoUploading] = useState(false);
   const photoRef = useRef(null);
 
@@ -73,6 +73,17 @@ export default function GroupEditModal({ groupId, editForm, setEditForm, onClose
             {busy ? "Saving..." : "Save"}
           </button>
         </div>
+
+        {onDelete && (
+          <div>
+            <div style={{ borderTop: "1px solid var(--border)", margin: "20px 0 16px" }} />
+            <button
+              onClick={() => { if (confirm("Delete this group? All members, plans, materials and chat will be permanently deleted. This cannot be undone.")) { onDelete(); } }}
+              style={{ width: "100%", background: "#fde8e8", color: "#dc2626", border: "1px solid #fca5a5", borderRadius: 8, padding: "10px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+              🗑 Delete Group
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

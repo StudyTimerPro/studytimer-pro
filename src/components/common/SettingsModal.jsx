@@ -3,7 +3,7 @@ import { updateProfile } from "firebase/auth";
 import { auth } from "../../firebase/config";
 import useStore from "../../store/useStore";
 import { saveUserSettings, saveUser } from "../../firebase/db";
-import { requestPermissionAndGetToken } from "../../firebase/messaging";
+import { requestPermissionAndGetToken, testPushNotification } from "../../firebase/messaging";
 
 export default function SettingsModal({ user, onClose }) {
   const { settings, setSettings, darkMode, setDarkMode, setUser, showToast } = useStore();
@@ -75,7 +75,13 @@ export default function SettingsModal({ user, onClose }) {
 
       <Field label="Notifications">
         {notifStatus === "granted" ? (
-          <div style={{ ...inputS, color: "#059669", background: "#d1fae5", border: "1px solid #059669", textAlign: "center" }}>✅ Notifications enabled</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ ...inputS, color: "#059669", background: "#d1fae5", border: "1px solid #059669", textAlign: "center", flex: 1 }}>✅ Notifications enabled</div>
+            <button onClick={async () => { const ok = await testPushNotification(user.uid); showToast(ok ? "Test notification sent!" : "No token — enable notifications first"); }}
+              style={{ ...inputS, cursor: "pointer", background: "var(--surface)", border: "1.5px solid var(--border)", color: "var(--ink)", fontWeight: 600, whiteSpace: "nowrap", width: "auto", flexShrink: 0 }}>
+              🧪 Test Push
+            </button>
+          </div>
         ) : notifStatus === "denied" ? (
           <div style={{ ...inputS, color: "#dc2626", background: "#fde8e8", border: "1px solid #dc2626", fontSize: 12 }}>❌ Blocked — enable in browser settings</div>
         ) : notifStatus === "unsupported" ? (

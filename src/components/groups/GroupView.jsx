@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { listenOnlineMembers, listenChat, setupPresence, updateGroup, leaveGroup, notifyAll, listenJoinRequests, listenGroupPlans, deleteGroup } from "../../firebase/groupsDb";
+import { listenOnlineMembers, listenChat, setupPresence, updateGroup, leaveGroup, sendMessage, setPinnedMessage, listenJoinRequests, listenGroupPlans, deleteGroup } from "../../firebase/groupsDb";
 import { listenLibraryItems } from "../../firebase/groupsLibrary";
+import { notifyAnnouncement } from "../../utils/notificationHelper";
 import useStore from "../../store/useStore";
 import GroupPlans          from "./GroupPlans";
 import GroupMembers        from "./GroupMembers";
@@ -10,7 +11,7 @@ import GroupNotifications  from "./GroupNotifications";
 import GroupEditModal      from "./GroupEditModal";
 import { LoadingOverlay }  from "../common/LoadingAnimation";
 
-export default function GroupView({ group, user, showToast, onGroupUpdated, onLeave, onRefresh }) {
+export default function GroupView({ group, user, showToast, onGroupUpdated, onLeave }) {
   const [tab,          setTab]          = useState("members");
   const [onlineUids,   setOnlineUids]   = useState(new Set());
   const [messages,     setMessages]     = useState([]);
@@ -21,6 +22,10 @@ export default function GroupView({ group, user, showToast, onGroupUpdated, onLe
   const [pendingJoin,  setPendingJoin]  = useState([]);
   const [pendingLib,   setPendingLib]   = useState([]);
   const [pendingPlans, setPendingPlans] = useState([]);
+  const [annOpen,      setAnnOpen]      = useState(false);
+  const [annTitle,     setAnnTitle]     = useState("");
+  const [annMsg,       setAnnMsg]       = useState("");
+  const [annBusy,      setAnnBusy]      = useState(false);
 
   const {
     setCurrentGroupId, setCurrentGroupRole, setCurrentGroupName, setCurrentGroupMembers,
@@ -92,9 +97,10 @@ export default function GroupView({ group, user, showToast, onGroupUpdated, onLe
     await leaveGroup(user.uid, group.id); onLeave();
   }
 
-  async function handleNotify() {
-    await notifyAll(group.id, user.displayName || "Admin");
-    showToast("Notification sent!"); setTab("chat");
+  async function handleDelete() {
+    setDeleting(true);
+    try { await deleteGroup(group.id, user.uid); onLeave(); }
+    catch (err) { showToast(err.message || "Delete failed"); setDeleting(false); }
   }
 
   function handleShare() {
@@ -104,11 +110,21 @@ export default function GroupView({ group, user, showToast, onGroupUpdated, onLe
       .catch(() => showToast(`Invite code: ${code}`));
   }
 
-  async function handleDelete() {
-    if (!confirm(`Delete "${group.name}"? This will permanently delete all members, plans, materials and chat. This cannot be undone.`)) return;
-    setDeleting(true);
-    try { await deleteGroup(group.id, user.uid); onLeave(); }
-    catch (err) { showToast(err.message || "Delete failed"); setDeleting(false); }
+  async function handleAnnouncement() {
+    if (!annTitle.trim() || !annMsg.trim()) { showToast("Enter title and message"); return; }
+    setAnnBusy(true);
+    try {
+      const title = annTitle.trim();
+      const msg   = annMsg.trim();
+      const memberUids = Object.keys(members);
+      await notifyAnnouncement(memberUids, title, msg, group.name, group.id);
+      await sendMessage(group.id, user.uid, user, `${title}\n${msg}`, [], "announcement");
+      await setPinnedMessage(group.id, { text: `${title}\n${msg}`, uid: user.uid, name: user.displayName || "Admin", createdAt: Date.now(), type: "announcement" });
+      showToast("Announcement sent ✓");
+      setAnnTitle(""); setAnnMsg(""); setAnnOpen(false);
+      setTab("chat");
+    } catch { showToast("Failed to send"); }
+    finally { setAnnBusy(false); }
   }
 
   const TABS = ["members", "plans", "library", "chat"];
@@ -131,12 +147,15 @@ export default function GroupView({ group, user, showToast, onGroupUpdated, onLe
             </div>
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-            {isAdmin && <TopBtn onClick={openEdit}>✏ Edit</TopBtn>}
+            {(isAdmin || isCreator) && <TopBtn onClick={() => setAnnOpen(true)}>📢 Notify</TopBtn>}
             <TopBtn onClick={handleShare}>🔗 Invite</TopBtn>
-            {isAdmin && <TopBtn onClick={handleNotify}>📢 Notify</TopBtn>}
-            <TopBtn onClick={onRefresh}>↺ Refresh</TopBtn>
-            <TopBtn onClick={handleLeave} danger>Leave</TopBtn>
-            {isCreator && <TopBtn onClick={handleDelete} danger>🗑 Delete</TopBtn>}
+            {(isAdmin || isCreator) && (
+              <button onClick={openEdit} title="Edit Group"
+                style={{ background: "none", border: "none", cursor: "pointer", fontSize: 22, color: "white", padding: "4px 6px", lineHeight: 1 }}>
+                ✏️
+              </button>
+            )}
+            {!isCreator && <TopBtn onClick={handleLeave} danger>Leave</TopBtn>}
           </div>
         </div>
       </div>
@@ -165,7 +184,28 @@ export default function GroupView({ group, user, showToast, onGroupUpdated, onLe
 
       {editOpen && (
         <GroupEditModal groupId={group.id} editForm={editForm} setEditForm={setEditForm}
-          onClose={() => setEditOpen(false)} onSave={handleSaveEdit} busy={busy} />
+          onClose={() => setEditOpen(false)} onSave={handleSaveEdit} busy={busy}
+          onDelete={isCreator ? handleDelete : null} />
+      )}
+
+      {annOpen && (
+        <div onClick={e => e.target === e.currentTarget && setAnnOpen(false)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 400, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ background: "var(--surface)", borderRadius: 14, padding: 24, width: "min(400px,92vw)", boxShadow: "0 20px 60px rgba(0,0,0,.2)" }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--ink)", marginBottom: 16 }}>📢 Send Announcement</h3>
+            <input value={annTitle} onChange={e => setAnnTitle(e.target.value)} placeholder="Title (required)"
+              style={{ width: "100%", padding: "9px 12px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 14, background: "var(--bg)", color: "var(--ink)", fontFamily: "inherit", boxSizing: "border-box" }} />
+            <textarea value={annMsg} onChange={e => setAnnMsg(e.target.value)} placeholder="Message (required)" rows={4}
+              style={{ width: "100%", padding: "9px 12px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 14, background: "var(--bg)", color: "var(--ink)", fontFamily: "inherit", boxSizing: "border-box", marginTop: 8, resize: "vertical" }} />
+            <div style={{ display: "flex", gap: 10, marginTop: 16, justifyContent: "flex-end" }}>
+              <button onClick={() => setAnnOpen(false)} style={{ background: "none", border: "1.5px solid var(--border)", borderRadius: 8, padding: "9px 18px", fontSize: 14, cursor: "pointer", color: "var(--ink)" }}>Cancel</button>
+              <button onClick={handleAnnouncement} disabled={annBusy}
+                style={{ background: annBusy ? "var(--border)" : "var(--accent)", color: "white", border: "none", borderRadius: 8, padding: "9px 22px", fontSize: 14, fontWeight: 600, cursor: annBusy ? "not-allowed" : "pointer" }}>
+                {annBusy ? "Sending…" : "Send Announcement"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

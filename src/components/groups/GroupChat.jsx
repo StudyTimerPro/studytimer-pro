@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
-import { sendMessage } from "../../firebase/groupsDb";
+import { sendMessage, listenPinnedMessage, removePinnedMessage } from "../../firebase/groupsDb";
 import { notifyMention } from "../../utils/notificationHelper";
 
 export default function GroupChat({ group, user, messages }) {
@@ -7,12 +7,20 @@ export default function GroupChat({ group, user, messages }) {
   const [sending,      setSending]      = useState(false);
   const [mentionSearch,setMentionSearch]= useState(null);
   const [mentionIdx,   setMentionIdx]   = useState(0);
+  const [pinnedMsg,    setPinnedMsg]    = useState(null);
   const bottomRef  = useRef(null);
   const textareaRef = useRef(null);
+
+  const isAdmin = group.createdBy === user.uid || group.members?.[user.uid]?.role === "admin";
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    const unsub = listenPinnedMessage(group.id, setPinnedMsg);
+    return unsub;
+  }, [group.id]);
 
   const allMembers = Object.entries(group.members || {})
     .filter(([uid]) => uid !== user.uid)
@@ -93,6 +101,17 @@ export default function GroupChat({ group, user, messages }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
+      {pinnedMsg && (
+        <div style={{ background: "rgba(251,191,36,.18)", borderBottom: "1px solid rgba(251,191,36,.4)", padding: "8px 14px", display: "flex", alignItems: "flex-start", gap: 8, flexShrink: 0 }}>
+          <span style={{ fontSize: 16, flexShrink: 0 }}>📢</span>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: "var(--ink)", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{pinnedMsg.text}</div>
+          {isAdmin && (
+            <button onClick={() => removePinnedMessage(group.id)}
+              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--ink2)", fontSize: 14, flexShrink: 0, padding: "0 2px", lineHeight: 1 }} title="Unpin">✕</button>
+          )}
+        </div>
+      )}
+
       <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
         {messages.length === 0 && (
           <div style={{ textAlign: "center", color: "var(--ink2)", padding: "40px 20px", fontSize: 14 }}>
@@ -104,6 +123,13 @@ export default function GroupChat({ group, user, messages }) {
           const isSystem = msg.uid === "system";
           if (isSystem) return (
             <div key={msg.id} style={{ textAlign: "center", fontSize: 12, color: "var(--ink2)", padding: "2px 0" }}>{msg.text}</div>
+          );
+          if (msg.type === "announcement") return (
+            <div key={msg.id} style={{ background: "rgba(251,191,36,.15)", border: "1px solid rgba(251,191,36,.4)", borderRadius: 12, padding: "10px 14px", margin: "4px 0" }}>
+              <div style={{ fontSize: 11, color: "#92400e", fontWeight: 700, marginBottom: 3 }}>📢 Announcement · {msg.name}</div>
+              <div style={{ fontSize: 13, color: "var(--ink)", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{msg.text}</div>
+              <div style={{ fontSize: 10, color: "var(--ink2)", marginTop: 4 }}>{timeLabel(msg.createdAt)}</div>
+            </div>
           );
           return (
             <div key={msg.id} style={{ display: "flex", flexDirection: isMe ? "row-reverse" : "row", alignItems: "flex-end", gap: 8 }}>

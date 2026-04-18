@@ -82,7 +82,7 @@ export default function GroupMembers({ members, onlineUids, user, group, isAdmin
   }
 
   async function handleLike(targetUid) {
-    try { await toggleMemberLike(group.id, targetUid, user.uid); }
+    try { await toggleMemberLike(group.id, targetUid, user.uid, user.displayName || "Someone", group.name); }
     catch { showToast("Failed to like"); }
   }
 
