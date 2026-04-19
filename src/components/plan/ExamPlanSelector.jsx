@@ -234,7 +234,7 @@ function downloadJson(obj, filename) {
 }
 
 const S = {
-  wrap:       { position: "fixed", left: 0, right: 0, bottom: 0, background: "var(--surface)", borderTop: "1px solid var(--border)", padding: "8px 10px", display: "flex", gap: 6, alignItems: "center", zIndex: 800, boxShadow: "0 -4px 12px rgba(0,0,0,0.08)" },
+  wrap:       { flexShrink: 0, background: "var(--surface)", borderTop: "1px solid var(--border)", padding: "8px 10px", display: "flex", gap: 6, alignItems: "center", zIndex: 800, boxShadow: "0 -4px 12px rgba(0,0,0,0.08)" },
   selector:   { display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg)", color: "var(--ink)", cursor: "pointer", fontSize: 13, width: "100%", minWidth: 0 },
   selectorLabel: { flex: 1, textAlign: "left", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
   caret:      { fontSize: 10, color: "var(--ink2)" },

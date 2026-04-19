@@ -11,7 +11,7 @@ export default function LiveSession() {
   const remaining = Math.max(totalSecs - timerSeconds, 0);
 
   return (
-    <div style={{ maxWidth: 600, margin: "0 auto" }}>
+    <div style={{ flex: 1, overflowY: "auto", padding: "24px 16px" }}><div style={{ maxWidth: 600, margin: "0 auto" }}>
 
       {/* Timer Card */}
       <div style={{ background: "var(--surface)", borderRadius: 16, padding: 40, textAlign: "center", boxShadow: "var(--shadow)", marginBottom: 24 }}>
@@ -73,7 +73,7 @@ export default function LiveSession() {
           {sessions.map(s => <QuickRow key={s.id} session={s} />)}
         </div>
       )}
-    </div>
+    </div></div>
   );
 }
 

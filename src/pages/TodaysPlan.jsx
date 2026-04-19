@@ -119,94 +119,99 @@ export default function TodaysPlan() {
   const hasPlan = !!currentPlanId;
 
   return (
-    <div style={{ paddingBottom: 80, position: "relative" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", position: "relative" }}>
       {loadingInit && <LoadingOverlay message="Loading your plans…" />}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
-        <div style={{ display: "flex", gap: 12 }}>
-          <Chip label="Sessions" value={sessions.length} />
-          <Chip label="Total"    value={minsToHM(totalMins)} />
-        </div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <button onClick={() => setShowAI(true)} style={btnStyle("#7c3aed")}>✨ AI Plan</button>
-          <button onClick={openAdd} style={btnStyle("var(--accent)")} disabled={!hasPlan}>＋ Add Session</button>
-          <button onClick={handleExportCurrent} style={btnStyle("#0ea5e9")} disabled={!hasPlan}>⬇ Export</button>
-          <label style={{ ...btnStyle("#10b981"), display: "inline-block", cursor: "pointer" }}>
-            ⬆ Import
-            <input type="file" accept="application/json" onChange={handleImportPick} style={{ display: "none" }} disabled={!hasExam} />
-          </label>
+
+      <div style={{ flex: 1, overflowY: "auto", padding: "24px 16px 16px" }}>
+        <div style={{ maxWidth: 960, margin: "0 auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+            <div style={{ display: "flex", gap: 12 }}>
+              <Chip label="Sessions" value={sessions.length} />
+              <Chip label="Total"    value={minsToHM(totalMins)} />
+            </div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button onClick={() => setShowAI(true)} style={btnStyle("#7c3aed")}>✨ AI Plan</button>
+              <button onClick={openAdd} style={btnStyle("var(--accent)")} disabled={!hasPlan}>＋ Add Session</button>
+              <button onClick={handleExportCurrent} style={btnStyle("#0ea5e9")} disabled={!hasPlan}>⬇ Export</button>
+              <label style={{ ...btnStyle("#10b981"), display: "inline-block", cursor: "pointer" }}>
+                ⬆ Import
+                <input type="file" accept="application/json" onChange={handleImportPick} style={{ display: "none" }} disabled={!hasExam} />
+              </label>
+            </div>
+          </div>
+
+          {!hasExam && (
+            <EmptyState
+              icon="📚"
+              title="Add your first exam"
+              hint="Start by creating an exam to organize your study plans."
+              action={<button onClick={() => setShowAddExam(true)} style={btnStyle("var(--accent)")}>＋ Add Exam</button>}
+            />
+          )}
+
+          {hasExam && !hasPlan && (
+            <EmptyState
+              icon="📋"
+              title="No plans yet for this exam"
+              hint="Create a plan with AI, or add one manually."
+              action={
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
+                  <button onClick={() => setShowAI(true)} style={btnStyle("#7c3aed")}>✨ Create plan with AI</button>
+                </div>
+              }
+            />
+          )}
+
+          {hasPlan && (
+            <div style={{ background: "var(--surface)", borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)", boxShadow: "var(--shadow)" }}>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+                  <thead style={{ background: "var(--nav-bg)", color: "white" }}>
+                    <tr>
+                      {["Session","Priority","Start","End","Duration","Break After","Actions"].map(h => (
+                        <th key={h} style={{ padding: "12px 14px", textAlign: "left", fontSize: 12, textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sessions.length === 0 ? (
+                      <tr><td colSpan={7} style={{ textAlign: "center", padding: 48, color: "var(--ink2)" }}>
+                        <div style={{ fontSize: 40 }}>📋</div>
+                        <p style={{ marginTop: 12 }}>No sessions yet. Add your first study session!</p>
+                      </td></tr>
+                    ) : sessions.map(s => (
+                      <tr key={s.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                        <td style={{ padding: "12px 14px" }}>
+                          <div style={{ fontWeight: 500, color: "var(--ink)" }}>{s.name}</div>
+                          {s.subject && <div style={{ fontSize: 11, color: "var(--ink2)", marginTop: 2 }}>{s.subject}</div>}
+                        </td>
+                        <td style={{ padding: "12px 14px" }}><Badge p={s.priority} /></td>
+                        <td style={{ padding: "12px 14px", fontFamily: "monospace", fontSize: 13, color: "var(--ink)" }}>{fmt12(s.start)}</td>
+                        <td style={{ padding: "12px 14px", fontFamily: "monospace", fontSize: 13, color: "var(--ink)" }}>{fmt12(s.end)}</td>
+                        <td style={{ padding: "12px 14px" }}>
+                          <span style={{ fontFamily: "monospace", fontSize: 12, background: "var(--bg)", color: "var(--ink)", borderRadius: 6, padding: "3px 8px" }}>
+                            {minsToHM(duration(s.start, s.end))}
+                          </span>
+                        </td>
+                        <td style={{ padding: "12px 14px", fontSize: 12, fontFamily: "monospace", color: "var(--ink)" }}>
+                          {s.breakMins > 0 ? `${fmt12(s.end)} – ${fmt12(addMins(s.end, s.breakMins))}` : <span style={{ color: "var(--ink2)" }}>No break</span>}
+                        </td>
+                        <td style={{ padding: "12px 14px" }}>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button onClick={() => startSession(s)}    style={iconBtn("var(--accent)", "white")}>▶</button>
+                            <button onClick={() => openEdit(s)}        style={iconBtn("#eaf0fb", "#2563eb")}>✏</button>
+                            <button onClick={() => handleDelete(s.id)} style={iconBtn("#fde8e8", "#e63946")}>🗑</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       </div>
-
-      {!hasExam && (
-        <EmptyState
-          icon="📚"
-          title="Add your first exam"
-          hint="Start by creating an exam to organize your study plans."
-          action={<button onClick={() => setShowAddExam(true)} style={btnStyle("var(--accent)")}>＋ Add Exam</button>}
-        />
-      )}
-
-      {hasExam && !hasPlan && (
-        <EmptyState
-          icon="📋"
-          title="No plans yet for this exam"
-          hint="Create a plan with AI, or add one manually."
-          action={
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
-              <button onClick={() => setShowAI(true)} style={btnStyle("#7c3aed")}>✨ Create plan with AI</button>
-            </div>
-          }
-        />
-      )}
-
-      {hasPlan && (
-        <div style={{ background: "var(--surface)", borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)", boxShadow: "var(--shadow)" }}>
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
-              <thead style={{ background: "var(--nav-bg)", color: "white" }}>
-                <tr>
-                  {["Session","Priority","Start","End","Duration","Break After","Actions"].map(h => (
-                    <th key={h} style={{ padding: "12px 14px", textAlign: "left", fontSize: 12, textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {sessions.length === 0 ? (
-                  <tr><td colSpan={7} style={{ textAlign: "center", padding: 48, color: "var(--ink2)" }}>
-                    <div style={{ fontSize: 40 }}>📋</div>
-                    <p style={{ marginTop: 12 }}>No sessions yet. Add your first study session!</p>
-                  </td></tr>
-                ) : sessions.map(s => (
-                  <tr key={s.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                    <td style={{ padding: "12px 14px" }}>
-                      <div style={{ fontWeight: 500, color: "var(--ink)" }}>{s.name}</div>
-                      {s.subject && <div style={{ fontSize: 11, color: "var(--ink2)", marginTop: 2 }}>{s.subject}</div>}
-                    </td>
-                    <td style={{ padding: "12px 14px" }}><Badge p={s.priority} /></td>
-                    <td style={{ padding: "12px 14px", fontFamily: "monospace", fontSize: 13, color: "var(--ink)" }}>{fmt12(s.start)}</td>
-                    <td style={{ padding: "12px 14px", fontFamily: "monospace", fontSize: 13, color: "var(--ink)" }}>{fmt12(s.end)}</td>
-                    <td style={{ padding: "12px 14px" }}>
-                      <span style={{ fontFamily: "monospace", fontSize: 12, background: "var(--bg)", color: "var(--ink)", borderRadius: 6, padding: "3px 8px" }}>
-                        {minsToHM(duration(s.start, s.end))}
-                      </span>
-                    </td>
-                    <td style={{ padding: "12px 14px", fontSize: 12, fontFamily: "monospace", color: "var(--ink)" }}>
-                      {s.breakMins > 0 ? `${fmt12(s.end)} – ${fmt12(addMins(s.end, s.breakMins))}` : <span style={{ color: "var(--ink2)" }}>No break</span>}
-                    </td>
-                    <td style={{ padding: "12px 14px" }}>
-                      <div style={{ display: "flex", gap: 6 }}>
-                        <button onClick={() => startSession(s)}    style={iconBtn("var(--accent)", "white")}>▶</button>
-                        <button onClick={() => openEdit(s)}        style={iconBtn("#eaf0fb", "#2563eb")}>✏</button>
-                        <button onClick={() => handleDelete(s.id)} style={iconBtn("#fde8e8", "#e63946")}>🗑</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
       <ExamPlanSelector
         onAddExam={() => setShowAddExam(true)}

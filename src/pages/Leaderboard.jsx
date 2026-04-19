@@ -13,7 +13,7 @@ export default function Leaderboard() {
   const onlineCount = leaderboard.filter(u => u.status === "Online").length;
 
   return (
-    <div>
+    <div style={{ flex: 1, overflowY: "auto", padding: "24px 16px" }}>
       <div style={{ display: "flex", gap: 16, marginBottom: 20, flexWrap: "wrap" }}>
         <Chip label="Total Users" value={leaderboard.length} />
         <Chip label="Online Now"  value={onlineCount} color="var(--accent)" />

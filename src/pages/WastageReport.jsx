@@ -71,7 +71,7 @@ export default function WastageReport() {
   }
 
   return (
-    <div>
+    <div style={{ flex: 1, overflowY: "auto", padding: "24px 16px" }}>
       <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 16, color: "var(--ink)" }}>Today's Wastage</h2>
 
       <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>

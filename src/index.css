@@ -4,6 +4,18 @@
   padding: 0;
 }
 
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
+#root {
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
 :root {
   --bg:           #f0ede8;
   --surface:      #ffffff;
@@ -60,5 +72,5 @@ body.dark input, body.dark select, body.dark textarea { color-scheme: dark; }
 
 /* Mobile */
 @media (max-width: 600px) {
-  main { padding: 16px 12px !important; }
+  .page-scroll { padding: 16px 12px !important; }
 }

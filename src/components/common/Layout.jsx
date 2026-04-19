@@ -16,11 +16,11 @@ export default function Layout({ children }) {
   }, [darkMode]);
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg)", fontFamily: "'DM Sans', sans-serif" }}>
-      <Navbar />
-      <ActiveBanner />
+    <div style={{ height: "100vh", overflow: "hidden", display: "flex", flexDirection: "column", background: "var(--bg)", fontFamily: "'DM Sans', sans-serif" }}>
+      <div style={{ flexShrink: 0 }}><Navbar /></div>
+      <div style={{ flexShrink: 0 }}><ActiveBanner /></div>
 
-      <main style={{ maxWidth: 960, margin: "0 auto", padding: "24px 16px" }}>
+      <main style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
         {children}
       </main>
 

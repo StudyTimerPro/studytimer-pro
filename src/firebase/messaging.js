@@ -1,5 +1,5 @@
 import { getMessaging, getToken, onMessage } from "firebase/messaging";
-import { ref, set, get } from "firebase/database";
+import { ref, set, get, update } from "firebase/database";
 import { db } from "./config";
 import app from "./config";
 
@@ -26,16 +26,32 @@ export async function requestPermissionAndGetToken(uid) {
     await navigator.serviceWorker.ready;
     console.log("FCM: Service worker ready, getting FCM token...");
     const token = await getToken(getMsg(), { vapidKey: VAPID_KEY, serviceWorkerRegistration: registration });
-    console.log("FCM: Token", token ? "obtained: " + token.slice(0, 20) + "..." : "NOT obtained");
+    console.log("FCM: Token", token ? "obtained (full): " + token : "NOT obtained");
     if (token) {
-      await set(ref(db, `users/${uid}/fcmToken`), token);
-      await set(ref(db, `users/${uid}/fcmTokenUpdatedAt`), Date.now());
-      await set(ref(db, `users/${uid}/notificationsEnabled`), true);
-      console.log("FCM: Token saved to Firebase DB successfully");
+      console.log("FCM: Attempting Firebase write to users/" + uid + "...");
+      try {
+        await update(ref(db, `users/${uid}`), {
+          fcmToken: token,
+          fcmTokenUpdatedAt: Date.now(),
+          notificationsEnabled: true,
+        });
+        console.log("FCM: Firebase write SUCCESS — token saved to users/" + uid);
+      } catch (writeErr) {
+        console.log("FCM: Firebase write FAILED:", writeErr.code, writeErr.message);
+        // Fallback: try individual set() calls
+        try {
+          await set(ref(db, `users/${uid}/fcmToken`), token);
+          console.log("FCM: Fallback set() fcmToken SUCCESS");
+          await set(ref(db, `users/${uid}/fcmTokenUpdatedAt`), Date.now());
+          console.log("FCM: Fallback set() fcmTokenUpdatedAt SUCCESS");
+        } catch (fallbackErr) {
+          console.log("FCM: Fallback set() also FAILED:", fallbackErr.code, fallbackErr.message);
+        }
+      }
     }
     return token || null;
   } catch (err) {
-    console.log("FCM: Error getting token:", err.message || err);
+    console.log("FCM: Error getting token:", err.code, err.message || err);
     return null;
   }
 }

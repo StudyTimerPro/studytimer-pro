@@ -48,10 +48,10 @@ export default function Groups() {
 
   const sidebarStyle = isMobile
     ? { position: "fixed", top: 0, left: drawerOpen ? 0 : "-300px", width: 280, height: "100vh", background: "var(--surface)", zIndex: 300, transition: "left .25s ease", overflowY: "auto", boxShadow: drawerOpen ? "4px 0 24px rgba(0,0,0,.2)" : "none" }
-    : { width: 260, flexShrink: 0, background: "var(--surface)", borderRight: "1px solid var(--border)", overflowY: "auto" };
+    : { width: 260, flexShrink: 0, height: "100%", background: "var(--surface)", borderRight: "1px solid var(--border)", overflowY: "auto" };
 
   return (
-    <div style={{ display: "flex", margin: "-24px -16px", minHeight: "calc(100vh - 114px)" }}>
+    <div style={{ display: "flex", height: "100%", overflow: "hidden" }}>
       {isMobile && drawerOpen && (
         <div onClick={() => setDrawerOpen(false)}
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 299 }} />
