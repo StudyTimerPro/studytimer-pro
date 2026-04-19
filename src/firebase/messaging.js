@@ -1,64 +1,43 @@
-import { getMessaging, getToken, onMessage } from "firebase/messaging";
-import { ref, set, get, update } from "firebase/database";
-import { db } from "./config";
-import app from "./config";
+import { getToken, onMessage } from "firebase/messaging";
+import { ref, get, update } from "firebase/database";
+import { db, messaging } from "./config";
 
 const VAPID_KEY = "BJgwAvfV9_M7SdaNGWVjrE24E_i_CjnixZBS-V9cqGwHqXNOU5MjeyzpyBYl9c8p_ZpI0X7tZrvHAbiQ-qBz5sE";
-
-let _messaging = null;
-function getMsg() {
-  if (!_messaging) _messaging = getMessaging(app);
-  return _messaging;
-}
 
 export async function requestPermissionAndGetToken(uid) {
   if (!("Notification" in window)) { console.log("FCM: Notifications API not supported"); return null; }
   if (!("serviceWorker" in navigator)) { console.log("FCM: Service Worker not supported"); return null; }
-  console.log("FCM: Requesting notification permission...");
+  console.log("Step 1: Requesting permission...");
   const permission = await Notification.requestPermission();
-  console.log("FCM: Notification permission:", permission);
+  console.log("Step 2: Permission result: " + permission);
   if (permission !== "granted") return null;
   try {
-    console.log("FCM: Registering service worker...");
+    console.log("Step 3: Registering service worker...");
     const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-    console.log("FCM: Service worker registered:", registration.scope);
-    console.log("FCM: Waiting for service worker to be ready...");
+    console.log("Step 4: SW registered: " + registration.scope);
     await navigator.serviceWorker.ready;
-    console.log("FCM: Service worker ready, getting FCM token...");
-    const token = await getToken(getMsg(), { vapidKey: VAPID_KEY, serviceWorkerRegistration: registration });
-    console.log("FCM: Token", token ? "obtained (full): " + token : "NOT obtained");
+    console.log("Step 5: Getting FCM token...");
+    const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: registration });
+    console.log("Step 6: Token received: " + token);
     if (token) {
-      console.log("FCM: Attempting Firebase write to users/" + uid + "...");
-      try {
-        await update(ref(db, `users/${uid}`), {
-          fcmToken: token,
-          fcmTokenUpdatedAt: Date.now(),
-          notificationsEnabled: true,
-        });
-        console.log("FCM: Firebase write SUCCESS — token saved to users/" + uid);
-      } catch (writeErr) {
-        console.log("FCM: Firebase write FAILED:", writeErr.code, writeErr.message);
-        // Fallback: try individual set() calls
-        try {
-          await set(ref(db, `users/${uid}/fcmToken`), token);
-          console.log("FCM: Fallback set() fcmToken SUCCESS");
-          await set(ref(db, `users/${uid}/fcmTokenUpdatedAt`), Date.now());
-          console.log("FCM: Fallback set() fcmTokenUpdatedAt SUCCESS");
-        } catch (fallbackErr) {
-          console.log("FCM: Fallback set() also FAILED:", fallbackErr.code, fallbackErr.message);
-        }
-      }
+      console.log("Step 7: Saving to Firebase...");
+      await update(ref(db, `users/${uid}`), {
+        fcmToken: token,
+        fcmTokenUpdatedAt: Date.now(),
+        notificationsEnabled: true,
+      });
+      console.log("Step 8: Save complete");
     }
     return token || null;
   } catch (err) {
-    console.log("FCM: Error getting token:", err.code, err.message || err);
+    console.log("FCM: Error:", err.code, err.message || err);
     return null;
   }
 }
 
 export function listenForegroundMessages(callback) {
   try {
-    return onMessage(getMsg(), callback);
+    return onMessage(messaging, callback);
   } catch { return () => {}; }
 }
 

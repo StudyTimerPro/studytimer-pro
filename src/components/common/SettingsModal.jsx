@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { updateProfile } from "firebase/auth";
 import { auth } from "../../firebase/config";
 import useStore from "../../store/useStore";
@@ -17,8 +17,18 @@ export default function SettingsModal({ user, onClose }) {
     return Notification.permission;
   });
 
+  useEffect(() => {
+    if (notifStatus === "granted") {
+      console.log("SettingsModal: permission already granted — auto-registering token...");
+      requestPermissionAndGetToken(user.uid).then(token => {
+        console.log("Enable Notifications result:", token);
+      });
+    }
+  }, []);
+
   async function handleEnableNotifications() {
     const token = await requestPermissionAndGetToken(user.uid);
+    console.log("Enable Notifications result:", token);
     setNotifStatus(Notification.permission);
     if (token) showToast("Notifications enabled ✓");
     else if (Notification.permission === "denied") showToast("Enable notifications in browser settings");
@@ -75,11 +85,15 @@ export default function SettingsModal({ user, onClose }) {
 
       <Field label="Notifications">
         {notifStatus === "granted" ? (
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <div style={{ ...inputS, color: "#059669", background: "#d1fae5", border: "1px solid #059669", textAlign: "center", flex: 1 }}>✅ Notifications enabled</div>
-            <button onClick={async () => { const ok = await testPushNotification(user.uid); showToast(ok ? "Test notification sent!" : "No token — enable notifications first"); }}
+            <button onClick={async () => { const ok = await testPushNotification(user.uid); showToast(ok ? "Test notification sent!" : "No token — re-registering..."); if (!ok) handleEnableNotifications(); }}
               style={{ ...inputS, cursor: "pointer", background: "var(--surface)", border: "1.5px solid var(--border)", color: "var(--ink)", fontWeight: 600, whiteSpace: "nowrap", width: "auto", flexShrink: 0 }}>
               🧪 Test Push
+            </button>
+            <button onClick={handleEnableNotifications}
+              style={{ ...inputS, cursor: "pointer", background: "var(--surface)", border: "1.5px solid var(--border)", color: "var(--ink)", fontWeight: 600, whiteSpace: "nowrap", width: "auto", flexShrink: 0 }}>
+              🔄 Re-register
             </button>
           </div>
         ) : notifStatus === "denied" ? (

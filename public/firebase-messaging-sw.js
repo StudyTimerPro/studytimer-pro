@@ -7,14 +7,16 @@ const firebaseConfig = {
   projectId: "leaderboard-98e8c",
   storageBucket: "leaderboard-98e8c.firebasestorage.app",
   messagingSenderId: "952043922319",
+  appId: "1:952043922319:web:f94998ce71e566a07321fa",
   databaseURL: "https://leaderboard-98e8c-default-rtdb.asia-southeast1.firebasedatabase.app"
 };
 
-firebase.initializeApp(firebaseConfig);
+if (!firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
+}
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage(function(payload) {
-  console.log('Background message received:', payload);
   const notificationTitle = payload.notification.title;
   const notificationOptions = {
     body: payload.notification.body,
