@@ -238,3 +238,61 @@ export function decrementUserTokens(uid) {
     Math.max(0, (current === null ? 10 : current) - 1)
   );
 }
+
+// ── Study Progress (daily sessionStudied map) ──────────────────────
+// Path: studyProgress/{uid}/{YYYY-MM-DD}  →  { [sessionId]: secondsStudied }
+
+function getStudyProgressStorageKey(uid, dateKey) {
+  return `stp:studyProgress:${uid}:${dateKey}`;
+}
+
+function saveStudyProgressLocal(uid, dateKey, progressMap) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      getStudyProgressStorageKey(uid, dateKey),
+      JSON.stringify(progressMap || {})
+    );
+  } catch {
+    // Ignore local storage failures and keep app behavior non-fatal.
+  }
+}
+
+function getStudyProgressLocal(uid, dateKey) {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(getStudyProgressStorageKey(uid, dateKey));
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveStudyProgress(uid, dateKey, progressMap) {
+  saveStudyProgressLocal(uid, dateKey, progressMap);
+  return set(ref(db, `studyProgress/${uid}/${dateKey}`), progressMap)
+    .catch((error) => {
+      if (error?.code !== "PERMISSION_DENIED") {
+        console.warn("saveStudyProgress failed:", error);
+      }
+      return null;
+    });
+}
+
+export function getStudyProgress(uid, dateKey) {
+  return get(ref(db, `studyProgress/${uid}/${dateKey}`))
+    .then((snap) => {
+      const remote = snap.val() || {};
+      if (remote && Object.keys(remote).length > 0) {
+        saveStudyProgressLocal(uid, dateKey, remote);
+        return remote;
+      }
+      return getStudyProgressLocal(uid, dateKey);
+    })
+    .catch((error) => {
+      if (error?.code !== "PERMISSION_DENIED") {
+        console.warn("getStudyProgress failed:", error);
+      }
+      return getStudyProgressLocal(uid, dateKey);
+    });
+}

@@ -11,17 +11,14 @@ import useStore from "../../store/useStore";
     Same routes & props as the original.
 
     CHANGE: tabs are now on a second row so they never collide with the
-    brand / avatar row on any viewport width.
-
-    CHANGE: Each tab now has a shortLabel for mobile screens.
-    theme.css shows .stp-tab-full on desktop and .stp-tab-short on mobile. */
+    brand / avatar row on any viewport width. */
 
 const tabs = [
-  { id: "/",            label: "Today's Plan",   shortLabel: "Plan",        icon: CalIcon },
-  { id: "/live",        label: "Live Session",   shortLabel: "Live",        icon: ClockIcon },
-  { id: "/wastage",     label: "Wastage Report", shortLabel: "Wastage",     icon: ChartIcon },
-  { id: "/groups",      label: "Groups",         shortLabel: "Groups",      icon: UsersIcon },
-  { id: "/leaderboard", label: "Leaderboard",    shortLabel: "Leaderboard", icon: TrophyIcon },
+  { id: "/",            label: "Today's Plan",   icon: CalIcon },
+  { id: "/live",        label: "Live Session",   icon: ClockIcon },
+  { id: "/wastage",     label: "Wastage Report", icon: ChartIcon },
+  { id: "/groups",      label: "Groups",         icon: UsersIcon },
+  { id: "/leaderboard", label: "Leaderboard",    icon: TrophyIcon },
 ];
 
 export default function Navbar() {
@@ -39,6 +36,7 @@ export default function Navbar() {
       await login();
     } catch (err) {
       console.error("Switch account failed:", err);
+      // showToast is available via the store if you want to surface this to the UI:
       // useStore.getState().showToast("Could not switch account. Please try again.");
     }
   }
@@ -92,9 +90,7 @@ export default function Navbar() {
               return (
                 <button key={t.id} className={active ? "active" : ""} onClick={() => navigate(t.id)}>
                   <Icon />
-                  {/* Desktop: full label  |  Mobile: short label (controlled by theme.css) */}
-                  <span className="stp-tab-full">{t.label}</span>
-                  <span className="stp-tab-short">{t.shortLabel}</span>
+                  <span>{t.label}</span>
                 </button>
               );
             })}

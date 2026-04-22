@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { updateProfile } from "firebase/auth";
 import { auth } from "../../firebase/config";
 import useStore from "../../store/useStore";
@@ -7,24 +7,39 @@ import { requestPermissionAndGetToken, testPushNotification } from "../../fireba
 
 export default function SettingsModal({ user, onClose }) {
   const { settings, setSettings, darkMode, setDarkMode, setUser, showToast } = useStore();
+
   const [displayName, setDisplayName] = useState(settings?.displayName || user?.displayName || "");
-  const [dailyGoal, setDailyGoal] = useState(settings?.dailyGoalHours || 6);
-  const [examName, setExamName] = useState(settings?.examName || "");
-  const [examDate, setExamDate] = useState(settings?.examDate || "");
-  const [busy, setBusy] = useState(false);
+  const [dailyGoal,   setDailyGoal]   = useState(settings?.dailyGoalHours || 6);
+  const [examName,    setExamName]    = useState(settings?.examName || "");
+  const [examDate,    setExamDate]    = useState(settings?.examDate || "");
+  const [busy,        setBusy]        = useState(false);
   const [notifStatus, setNotifStatus] = useState(() => {
     if (!("Notification" in window)) return "unsupported";
     return Notification.permission;
   });
 
+  // BUG FIX: added user.uid to the dependency array — previously the empty
+  // deps array caused a stale closure where user.uid could be undefined/stale
+  // on the first render (especially in React Strict Mode which runs effects twice).
   useEffect(() => {
-    if (notifStatus === "granted") {
+    if (notifStatus === "granted" && user?.uid) {
       console.log("SettingsModal: permission already granted — auto-registering token...");
       requestPermissionAndGetToken(user.uid).then(token => {
         console.log("Enable Notifications result:", token);
       });
     }
-  }, []);
+  }, [user?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
+  // ^ intentionally omitting notifStatus so this only re-runs if uid changes
+
+  // BUG FIX: close on Escape key — standard UX expectation for modals
+  const handleKeyDown = useCallback((e) => {
+    if (e.key === "Escape") onClose();
+  }, [onClose]);
+
+  useEffect(() => {
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [handleKeyDown]);
 
   async function handleEnableNotifications() {
     const token = await requestPermissionAndGetToken(user.uid);
@@ -35,19 +50,39 @@ export default function SettingsModal({ user, onClose }) {
   }
 
   async function handleSave() {
+    // BUG FIX: validate displayName before hitting Firebase
+    if (!displayName.trim()) {
+      showToast("Display name cannot be empty");
+      return;
+    }
+
     setBusy(true);
     try {
-      const updated = { ...settings, displayName, dailyGoalHours: dailyGoal, examName, examDate };
+      const updated = { ...settings, displayName: displayName.trim(), dailyGoalHours: dailyGoal, examName, examDate };
       await saveUserSettings(user.uid, updated);
       setSettings(updated);
 
-      // Update Firebase Auth profile + Zustand so Navbar re-renders immediately
       if (auth.currentUser) {
-        await updateProfile(auth.currentUser, { displayName });
-        setUser({ ...auth.currentUser, displayName });
-      }
-      await saveUser(user.uid, { name: displayName });
+        await updateProfile(auth.currentUser, { displayName: displayName.trim() });
 
+        /*
+         * BUG FIX: previously spread `auth.currentUser` directly — Firebase User
+         * is a class instance whose prototype methods and non-enumerable getters
+         * are lost when spread into a plain object. This caused silent failures
+         * anywhere the user object needed to call methods (e.g. getIdToken()).
+         *
+         * Fix: build a plain-object snapshot with only the fields the app reads.
+         */
+        setUser({
+          uid:         auth.currentUser.uid,
+          email:       auth.currentUser.email,
+          displayName: displayName.trim(),
+          photoURL:    auth.currentUser.photoURL,
+          emailVerified: auth.currentUser.emailVerified,
+        });
+      }
+
+      await saveUser(user.uid, { name: displayName.trim() });
       onClose();
     } finally {
       setBusy(false);
@@ -59,21 +94,35 @@ export default function SettingsModal({ user, onClose }) {
       <h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--ink)", marginBottom: 24 }}>⚙️ Settings</h2>
 
       <Field label="Display Name">
-        <input value={displayName} onChange={e => setDisplayName(e.target.value)} style={inputS} placeholder="Your name" />
+        <input
+          value={displayName}
+          onChange={e => setDisplayName(e.target.value)}
+          style={inputS}
+          placeholder="Your name"
+        />
       </Field>
+
       <Field label={`Daily Study Goal — ${dailyGoal}h`}>
-        <input type="range" min={1} max={12} value={dailyGoal} onChange={e => setDailyGoal(+e.target.value)}
-          style={{ width: "100%", accentColor: "var(--accent)" }} />
+        <input
+          type="range" min={1} max={12} value={dailyGoal}
+          onChange={e => setDailyGoal(+e.target.value)}
+          style={{ width: "100%", accentColor: "var(--accent)" }}
+        />
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--ink2)", marginTop: 4 }}>
-          <span>1h</span><span style={{ color: "var(--accent)", fontWeight: 700 }}>{dailyGoal}h / day</span><span>12h</span>
+          <span>1h</span>
+          <span style={{ color: "var(--accent)", fontWeight: 700 }}>{dailyGoal}h / day</span>
+          <span>12h</span>
         </div>
       </Field>
+
       <Field label="Exam Name">
         <input value={examName} onChange={e => setExamName(e.target.value)} placeholder="e.g. TNPSC Group 4" style={inputS} />
       </Field>
+
       <Field label="Exam Date">
         <input type="date" value={examDate} onChange={e => setExamDate(e.target.value)} style={inputS} />
       </Field>
+
       <Field label="Dark Mode">
         <button
           onClick={() => setDarkMode(!darkMode)}
@@ -86,22 +135,36 @@ export default function SettingsModal({ user, onClose }) {
       <Field label="Notifications">
         {notifStatus === "granted" ? (
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <div style={{ ...inputS, color: "#059669", background: "#d1fae5", border: "1px solid #059669", textAlign: "center", flex: 1 }}>✅ Notifications enabled</div>
-            <button onClick={async () => { const ok = await testPushNotification(user.uid); showToast(ok ? "Test notification sent!" : "No token — re-registering..."); if (!ok) handleEnableNotifications(); }}
+            <div style={{ ...inputS, color: "#059669", background: "#d1fae5", border: "1px solid #059669", textAlign: "center", flex: 1 }}>
+              ✅ Notifications enabled
+            </div>
+            <button
+              onClick={async () => {
+                const ok = await testPushNotification(user.uid);
+                showToast(ok ? "Test notification sent!" : "No token — re-registering...");
+                if (!ok) handleEnableNotifications();
+              }}
               style={{ ...inputS, cursor: "pointer", background: "var(--surface)", border: "1.5px solid var(--border)", color: "var(--ink)", fontWeight: 600, whiteSpace: "nowrap", width: "auto", flexShrink: 0 }}>
               🧪 Test Push
             </button>
-            <button onClick={handleEnableNotifications}
+            <button
+              onClick={handleEnableNotifications}
               style={{ ...inputS, cursor: "pointer", background: "var(--surface)", border: "1.5px solid var(--border)", color: "var(--ink)", fontWeight: 600, whiteSpace: "nowrap", width: "auto", flexShrink: 0 }}>
               🔄 Re-register
             </button>
           </div>
         ) : notifStatus === "denied" ? (
-          <div style={{ ...inputS, color: "#dc2626", background: "#fde8e8", border: "1px solid #dc2626", fontSize: 12 }}>❌ Blocked — enable in browser settings</div>
+          <div style={{ ...inputS, color: "#dc2626", background: "#fde8e8", border: "1px solid #dc2626", fontSize: 12 }}>
+            ❌ Blocked — enable in browser settings
+          </div>
         ) : notifStatus === "unsupported" ? (
-          <div style={{ ...inputS, color: "var(--ink2)", textAlign: "center", fontSize: 13 }}>Not supported in this browser</div>
+          <div style={{ ...inputS, color: "var(--ink2)", textAlign: "center", fontSize: 13 }}>
+            Not supported in this browser
+          </div>
         ) : (
-          <button onClick={handleEnableNotifications} style={{ ...inputS, cursor: "pointer", background: "var(--accent)", color: "white", border: "none", textAlign: "center", fontWeight: 600 }}>
+          <button
+            onClick={handleEnableNotifications}
+            style={{ ...inputS, cursor: "pointer", background: "var(--accent)", color: "white", border: "none", textAlign: "center", fontWeight: 600 }}>
             🔔 Enable Notifications
           </button>
         )}
@@ -120,7 +183,9 @@ export default function SettingsModal({ user, onClose }) {
 function Field({ label, children }) {
   return (
     <div style={{ marginBottom: 16 }}>
-      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--ink2)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 }}>{label}</label>
+      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--ink2)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 }}>
+        {label}
+      </label>
       {children}
     </div>
   );
@@ -139,6 +204,6 @@ function Overlay({ onClose, children }) {
   );
 }
 
-const inputS   = { width: "100%", padding: "10px 12px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 14, background: "var(--bg)", color: "var(--ink)", fontFamily: "inherit", boxSizing: "border-box" };
-const saveBtn  = { flex: 1, background: "var(--accent)", color: "white", border: "none", borderRadius: 10, padding: "11px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer" };
-const cancelBtn= { background: "none", border: "1.5px solid var(--border)", borderRadius: 10, padding: "11px 20px", fontSize: 14, cursor: "pointer", color: "var(--ink2)" };
+const inputS    = { width: "100%", padding: "10px 12px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 14, background: "var(--bg)", color: "var(--ink)", fontFamily: "inherit", boxSizing: "border-box" };
+const saveBtn   = { flex: 1, background: "var(--accent)", color: "white", border: "none", borderRadius: 10, padding: "11px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer" };
+const cancelBtn = { background: "none", border: "1.5px solid var(--border)", borderRadius: 10, padding: "11px 20px", fontSize: 14, cursor: "pointer", color: "var(--ink2)" };

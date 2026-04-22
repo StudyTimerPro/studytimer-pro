@@ -30,17 +30,6 @@ const useStore = create((set) => ({
   activeSession: null,
   setActiveSession: (activeSession) => set({ activeSession }),
 
-  // ── Study-time tracking (per session, survives tab switches) ──────
-  // { [sessionId]: totalSecondsStudied }
-  // Supports both plain object and functional updater: setSessionStudied(prev => ({...prev, x: y}))
-  sessionStudied: {},
-  setSessionStudied: (updater) =>
-    set(state => ({
-      sessionStudied: typeof updater === "function"
-        ? updater(state.sessionStudied)
-        : updater,
-    })),
-
   // ── Timer ─────────────────────────────────
   timerSeconds: 0,
   timerRunning: false,
