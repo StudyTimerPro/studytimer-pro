@@ -4,7 +4,18 @@ import { listenWastage, deleteWastage, deleteAllWastage } from "../firebase/db";
 import useStore from "../store/useStore";
 import WastageHistoryTable from "./plan/WastageHistoryTable";
 
-export default function WastageHistory() {
+function toHHMMSS(mins) {
+  const m = mins || 0;
+  const h = Math.floor(m / 60), mm = m % 60;
+  return `${String(h).padStart(2, "0")}:${String(mm).padStart(2, "0")}:00`;
+}
+
+/**
+ * activeSessions: current plan's session objects { id, name, subject?, ... }
+ * Used to determine which columns to show — only live sessions, no ghost columns
+ * from deleted sessions.
+ */
+export default function WastageHistory({ activeSessions = [] }) {
   const { user } = useAuth();
   const { showToast, setWastageHistory } = useStore();
   const [history,  setHistory]  = useState({});
@@ -21,19 +32,23 @@ export default function WastageHistory() {
 
   const dates = Object.keys(history).sort((a, b) => b.localeCompare(a));
 
+  // ── Session columns: ONLY from the current active plan ───────────────────
+  // Using activeSessions prop means deleted/renamed sessions won't ghost as columns.
+  // Deduplicate by key in case two sessions share a subject.
   const sessionKeys = [];
   const seen = new Set();
-  dates.forEach(date => {
-    Object.values(history[date] || {}).forEach(s => {
-      const key = s.subject || s.sessionName;
-      if (!seen.has(key)) { seen.add(key); sessionKeys.push(key); }
-    });
+  activeSessions.forEach(s => {
+    const key = s.subject || s.name;
+    if (key && !seen.has(key)) { seen.add(key); sessionKeys.push(key); }
   });
 
+  // ── Totals: sum ALL wastage duration (missed + partial) ──────────────────
+  // Previously filtered to s.missed only — wrong now that duration = actual wastage.
   const totalMissed = dates.reduce((acc, d) =>
     acc + Object.values(history[d] || {}).filter(s => s.missed).length, 0);
+
   const totalMins = dates.reduce((acc, d) =>
-    acc + Object.values(history[d] || {}).filter(s => s.missed).reduce((a, s) => a + (s.duration || 0), 0), 0);
+    acc + Object.values(history[d] || {}).reduce((a, s) => a + (s.duration || 0), 0), 0);
 
   async function handleRemoveSelected() {
     if (!selected || !user) return;
@@ -84,12 +99,6 @@ export default function WastageHistory() {
       </div>
     </div>
   );
-}
-
-function toHHMMSS(mins) {
-  const m = mins || 0;
-  const h = Math.floor(m / 60), mm = m % 60;
-  return `${String(h).padStart(2, "0")}:${String(mm).padStart(2, "0")}:00`;
 }
 
 const redBtn = { background: "var(--red)", color: "white", border: "none", borderRadius: 8, padding: "9px 20px", fontSize: 14, fontWeight: 500, cursor: "pointer" };
