@@ -39,6 +39,7 @@ export default function TodaysPlan() {
     sessionStudied, setSessionStudied,
   } = useStore();
 
+  const [studiedLoaded, setStudiedLoaded] = useState(false);
   const isMobile = useIsMobile();
   const [modalOpen,    setModalOpen]    = useState(false);
   const [editingId,    setEditingId]    = useState(null);
@@ -77,15 +78,23 @@ export default function TodaysPlan() {
 
   useEffect(() => {
     if (!user) return;
+    setStudiedLoaded(false);
     getStudyProgress(user.uid, todayKey).then(saved => {
       if (saved && Object.keys(saved).length > 0) {
         const normalizedSaved = Object.fromEntries(
           Object.entries(saved).map(([sessionId, secs]) => [sessionId, Number(secs) || 0])
         );
-        // Merge with any in-memory values (in case timer was already running)
-        setSessionStudied(prev => ({ ...normalizedSaved, ...prev }));
+        // Merge: persisted wins, but never regress an already-running timer
+        setSessionStudied(prev => {
+          const next = { ...normalizedSaved };
+          Object.entries(prev).forEach(([id, secs]) => {
+            next[id] = Math.max(next[id] || 0, Number(secs) || 0);
+          });
+          return next;
+        });
       }
-    });
+      setStudiedLoaded(true);
+    }).catch(() => setStudiedLoaded(true));
   }, [user]); // eslint-disable-line
 
   // Debounced auto-save whenever sessionStudied changes
@@ -96,6 +105,26 @@ export default function TodaysPlan() {
     }, 2000); // 2-second debounce
     return () => clearTimeout(t);
   }, [sessionStudied, user]); // eslint-disable-line
+
+  // On page unload (refresh / tab close), synchronously write current progress
+  // — including any live timerSeconds not yet flushed — to localStorage.
+  // getStudyProgress merges localStorage + Firebase on next load, so this
+  // ensures a mid-run refresh never loses the current session's elapsed time.
+  useEffect(() => {
+    if (!user) return;
+    const handleUnload = () => {
+      const state = useStore.getState();
+      const toSave = { ...state.sessionStudied };
+      if (state.activeSession?.id && state.timerSeconds > 0) {
+        toSave[state.activeSession.id] =
+          (toSave[state.activeSession.id] || 0) + state.timerSeconds;
+      }
+      if (Object.keys(toSave).length === 0) return;
+      saveStudyProgress(user.uid, todayKey, toSave);
+    };
+    window.addEventListener("beforeunload", handleUnload);
+    return () => window.removeEventListener("beforeunload", handleUnload);
+  }, [user]); // eslint-disable-line
 
   // ── Derived stats ──────────────────────────────────────────────────────────
   const totalMins = useMemo(
@@ -135,7 +164,7 @@ export default function TodaysPlan() {
     const isLive = timerRunning && activeSession?.id === session.id;
     const isFull = !isLive && sessDurSecs > 0 && studied >= sessDurSecs;
     const isPartial = !isLive && studied > 0 && !isFull;
-    const isMissed = !isLive && studied <= 0 && toMin(session.end) <= nowMin;
+    const isMissed = studiedLoaded && !isLive && studied <= 0 && toMin(session.end) <= nowMin;
     const isWindow = !isLive && pct === 0
       && toMin(session.start) <= nowMin && nowMin < toMin(session.end);
 
@@ -499,7 +528,7 @@ export default function TodaysPlan() {
                 const isLive    = timerRunning && activeSession?.id === s.id;
                 const isFull    = !isLive && sessDurSecs > 0 && studied >= sessDurSecs;
                 const isPartial = !isLive && studied > 0 && !isFull;
-                const isMissed  = !isLive && studied <= 0 && toMin(s.end) <= nowMin;
+                const isMissed  = studiedLoaded && !isLive && studied <= 0 && toMin(s.end) <= nowMin;
                 const isWindow  = !isLive && pct === 0
                                && toMin(s.start) <= nowMin && nowMin < toMin(s.end);
 

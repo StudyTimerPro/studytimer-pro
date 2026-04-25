@@ -283,11 +283,19 @@ export function getStudyProgress(uid, dateKey) {
   return get(ref(db, `studyProgress/${uid}/${dateKey}`))
     .then((snap) => {
       const remote = snap.val() || {};
-      if (remote && Object.keys(remote).length > 0) {
-        saveStudyProgressLocal(uid, dateKey, remote);
-        return remote;
+      const local  = getStudyProgressLocal(uid, dateKey);
+      // Always merge both sources taking the max per session.
+      // This ensures a beforeunload localStorage save (with live timerSeconds)
+      // is never silently discarded when Firebase already has an older value.
+      const merged = { ...local };
+      Object.entries(remote).forEach(([id, secs]) => {
+        merged[id] = Math.max(merged[id] || 0, Number(secs) || 0);
+      });
+      if (Object.keys(merged).length > 0) {
+        saveStudyProgressLocal(uid, dateKey, merged);
+        return merged;
       }
-      return getStudyProgressLocal(uid, dateKey);
+      return {};
     })
     .catch((error) => {
       if (error?.code !== "PERMISSION_DENIED") {

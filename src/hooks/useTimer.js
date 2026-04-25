@@ -97,10 +97,18 @@ export function useTimer() {
 
   const start = () => setTimerRunning(true);
 
-  // Pause: just stop the ticker. timerSeconds is NOT reset — it continues to
-  // represent total elapsed for this session and the display logic will still
-  // show the accumulated time (see `studied` fix in TodaysPlan).
-  const pause = () => setTimerRunning(false);
+  // Pause: flush elapsed seconds into sessionStudied BEFORE stopping the ticker.
+  // This triggers the TodaysPlan save effect so progress persists through refresh.
+  // timerSeconds resets to 0 — on resume, the counting starts fresh and adds
+  // to the already-flushed amount via getSessionStudiedSecs.
+  const pause = () => {
+    const { activeSession: sess, timerSeconds: elapsed, setTimerSeconds } = useStore.getState();
+    if (sess?.id && elapsed > 0) {
+      flushSessionTime(sess.id, elapsed);
+      setTimerSeconds(0);
+    }
+    setTimerRunning(false);
+  };
 
   const reset = () => {
     persistElapsedSession(useStore.getState());
