@@ -41,7 +41,20 @@ function _syncTicker(running) {
   if (running && _tickerId === null) {
     _tickerId = setInterval(() => {
       const s = useStore.getState();
-      s.setTimerSeconds(s.timerSeconds + 1);
+      const next = s.timerSeconds + 1;
+      const current = s.activeSession;
+      const totalSecs = getSessionDurationSeconds(current);
+      const previousSecs = normalizeSeconds(s.sessionStudied?.[current?.id]);
+      // Auto-stop the moment the session reaches its full scheduled duration.
+      if (current?.id && totalSecs > 0 && previousSecs + next >= totalSecs) {
+        const remainder = Math.max(totalSecs - previousSecs, 0);
+        s.setTimerSeconds(remainder);
+        // Clamp stored studied time to exactly the session length and stop.
+        setSessionTime(current.id, totalSecs);
+        s.setTimerRunning(false);
+        return;
+      }
+      s.setTimerSeconds(next);
     }, 1000);
   } else if (!running && _tickerId !== null) {
     clearInterval(_tickerId);
@@ -95,7 +108,19 @@ export function useTimer() {
     // becomes false via pause / reset.
   }, [timerRunning]);
 
-  const start = () => setTimerRunning(true);
+  const start = () => {
+    const state = useStore.getState();
+    const current = state.activeSession;
+    if (!current?.id) return;
+    const totalSecs = getSessionDurationSeconds(current);
+    const stored = normalizeSeconds(state.sessionStudied?.[current.id]);
+    if (totalSecs > 0 && stored + state.timerSeconds >= totalSecs) {
+      // Already complete — refuse to resume.
+      showToast?.("Session already complete");
+      return;
+    }
+    setTimerRunning(true);
+  };
 
   // Pause: just stop the ticker. timerSeconds keeps its value so the visible
   // timer shows where it paused, and resume continues counting from there.
@@ -110,6 +135,15 @@ export function useTimer() {
   const startSession = (session) => {
     const state = useStore.getState();
     const current = state.activeSession;
+
+    // Reject if the target session is already fully studied.
+    const targetDur = getSessionDurationSeconds(session);
+    const targetStored = normalizeSeconds(state.sessionStudied?.[session.id]);
+    const targetLive = current?.id === session.id ? state.timerSeconds : 0;
+    if (targetDur > 0 && targetStored + targetLive >= targetDur) {
+      showToast?.("Session already complete");
+      return;
+    }
 
     if (current?.id === session.id) {
       // ── Same session, just resume — do NOT reset ──

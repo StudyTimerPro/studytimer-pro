@@ -191,7 +191,9 @@ export function saveUser(uid, data) {
 
 // ── Wastage History ────────────────────────
 export function saveWastage(uid, date, data) {
-  return set(ref(db, `wastage/${uid}/${date}`), data);
+  // Merge into the existing day so switching plans (which have different
+  // session IDs) doesn't wipe out wastage records from another plan.
+  return update(ref(db, `wastage/${uid}/${date}`), data || {});
 }
 
 export function deleteWastage(uid, date) {
