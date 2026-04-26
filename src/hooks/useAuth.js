@@ -66,11 +66,25 @@ export function useAuth() {
 }
 
 function calcStreak(wastage) {
+  // wastage tree is now {examId: {planId: {date: {sessionId: {...}}}}}
+  // Flatten into {date: [sessionEntry, ...]} across every plan.
+  const byDate = {};
+  for (const examId in wastage || {}) {
+    const plans = wastage[examId] || {};
+    for (const planId in plans) {
+      const dates = plans[planId] || {};
+      for (const dateKey in dates) {
+        const arr = byDate[dateKey] || (byDate[dateKey] = []);
+        Object.values(dates[dateKey] || {}).forEach(s => arr.push(s));
+      }
+    }
+  }
+
   let streak = 0;
   const d = new Date();
   for (let i = 0; i < 365; i++) {
     const key      = d.toISOString().split("T")[0];
-    const sessions = Object.values((wastage || {})[key] || {});
+    const sessions = byDate[key] || [];
     if (sessions.some(s => !s.missed)) {
       streak++;
     } else {

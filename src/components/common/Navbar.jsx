@@ -16,10 +16,17 @@ import useStore from "../../store/useStore";
     CHANGE: Each tab now has a shortLabel for mobile screens.
     theme.css shows .stp-tab-full on desktop and .stp-tab-short on mobile. */
 
-const tabs = [
+const tabsFixed = [
   { id: "/",            label: "Today's Plan",   shortLabel: "Plan",        icon: CalIcon },
   { id: "/live",        label: "Live Session",   shortLabel: "Live",        icon: ClockIcon },
   { id: "/wastage",     label: "Wastage Report", shortLabel: "Wastage",     icon: ChartIcon },
+  { id: "/groups",      label: "Groups",         shortLabel: "Groups",      icon: UsersIcon },
+  { id: "/leaderboard", label: "Leaderboard",    shortLabel: "Leaderboard", icon: TrophyIcon },
+];
+const tabsFlexible = [
+  { id: "/",            label: "Today's Plan",   shortLabel: "Plan",        icon: CalIcon },
+  { id: "/live",        label: "Live Session",   shortLabel: "Live",        icon: ClockIcon },
+  { id: "/wastage",     label: "Insights",       shortLabel: "Insights",    icon: ChartIcon },
   { id: "/groups",      label: "Groups",         shortLabel: "Groups",      icon: UsersIcon },
   { id: "/leaderboard", label: "Leaderboard",    shortLabel: "Leaderboard", icon: TrophyIcon },
 ];
@@ -30,6 +37,8 @@ export default function Navbar() {
   const location  = useLocation();
   const [showProfile, setShowProfile] = useState(false);
   const streak = useStore(s => s.streak);
+  const currentPlanMode = useStore(s => s.currentPlanMode);
+  const tabs = currentPlanMode === "flexible" ? tabsFlexible : tabsFixed;
 
   // BUG FIX: if login() throws after logout() the user is stuck logged-out
   // with no feedback. Wrap in try/catch and surface the error.

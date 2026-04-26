@@ -4,15 +4,36 @@ import useStore from "../store/useStore";
 
 export default function LiveSession() {
   const { timerSeconds, timerRunning, activeSession, start, pause, formatTime } = useTimer();
-  const sessions      = useStore((s) => s.sessions);
+  const sessions       = useStore((s) => s.sessions);
   const sessionStudied = useStore((s) => s.sessionStudied);
+  const currentPlanMode = useStore((s) => s.currentPlanMode);
+  const isFlex = currentPlanMode === "flexible";
 
-  const totalSecs = activeSession ? duration(activeSession.start, activeSession.end) * 60 : 0;
+  // In flex mode, show sessions in their created order (Session 1, 2…) since
+  // every session has the same synthetic start "00:00".
+  const orderedSessions = isFlex
+    ? [...sessions].sort((a, b) => {
+        const ca = Number(a.createdAt) || 0;
+        const cb = Number(b.createdAt) || 0;
+        if (ca !== cb) return ca - cb;
+        return (a.id || "").localeCompare(b.id || "");
+      })
+    : sessions;
+
+  const totalSecs = activeSession
+    ? (Number(activeSession.durationMins) > 0
+        ? Number(activeSession.durationMins) * 60
+        : duration(activeSession.start, activeSession.end) * 60)
+    : 0;
   const savedForActive = activeSession ? Number(sessionStudied[activeSession.id] || 0) : 0;
   const studiedSecs = savedForActive + (activeSession ? timerSeconds : 0);
   const progress    = totalSecs > 0 ? Math.min((studiedSecs / totalSecs) * 100, 100) : 0;
   const remaining   = Math.max(totalSecs - studiedSecs, 0);
   const completed   = !!activeSession && totalSecs > 0 && studiedSecs >= totalSecs;
+
+  const activeOrderIdx = activeSession && isFlex
+    ? orderedSessions.findIndex(s => s.id === activeSession.id)
+    : -1;
 
   const statusKey = !activeSession ? "idle" : completed ? "idle" : timerRunning ? "running" : "paused";
   const statusLbl = !activeSession ? "Idle" : completed ? "Completed" : timerRunning ? "Running" : "Paused";
@@ -24,7 +45,9 @@ export default function LiveSession() {
           <h1>Live <em>session</em></h1>
           <div className="stp-hero-sub">
             {activeSession
-              ? <>Tracking <b>{activeSession.name}</b> · {fmt12(activeSession.start)} – {fmt12(activeSession.end)}</>
+              ? (isFlex
+                  ? <>Tracking <b>{activeSession.name}</b>{activeOrderIdx >= 0 ? <> · Session {activeOrderIdx + 1}</> : null}</>
+                  : <>Tracking <b>{activeSession.name}</b> · {fmt12(activeSession.start)} – {fmt12(activeSession.end)}</>)
               : <>No session active. Pick one below or start one from Today's Plan.</>}
           </div>
         </div>
@@ -36,9 +59,14 @@ export default function LiveSession() {
             <span className="pulse" />
             {statusLbl}
           </span>
-          {activeSession && (
+          {activeSession && !isFlex && (
             <span className="stp-live-status idle" title="Scheduled window">
               {fmt12(activeSession.start)} – {fmt12(activeSession.end)}
+            </span>
+          )}
+          {activeSession && isFlex && activeOrderIdx >= 0 && (
+            <span className="stp-live-status idle" title="Session order">
+              Session {activeOrderIdx + 1} of {orderedSessions.length}
             </span>
           )}
         </div>
@@ -89,13 +117,15 @@ export default function LiveSession() {
         </div>
       </div>
 
-      {sessions.length > 0 && (
+      {orderedSessions.length > 0 && (
         <div className="stp-live-quick">
           <h3>Quick <em>start</em></h3>
-          {sessions.map(s => (
+          {orderedSessions.map((s, idx) => (
             <QuickRow
               key={s.id}
               session={s}
+              order={isFlex ? idx + 1 : null}
+              isFlex={isFlex}
               activeId={activeSession?.id}
               activeRunning={timerRunning}
               activeTimerSecs={timerSeconds}
@@ -112,8 +142,6 @@ function ProgressRing({ percent, paused }) {
   const R = 130, C = 2 * Math.PI * R;
   const pct = Math.max(0, Math.min(100, percent));
   const offset = C - (pct / 100) * C;
-  const filledLen = (pct / 100) * C;
-  const shineSeg  = 18; // length of the moving glow segment
   // Tip dot location: percent → angle around the ring
   const angle = (pct / 100) * 2 * Math.PI - Math.PI / 2;
   const tipX = 150 + R * Math.cos(angle);
@@ -126,14 +154,6 @@ function ProgressRing({ percent, paused }) {
         strokeDasharray={C} strokeDashoffset={offset}
         transform="rotate(-90 150 150)"
       />
-      {pct > 0 && (
-        <circle
-          className="shine" cx="150" cy="150" r={R} strokeWidth="14"
-          strokeDasharray={`${shineSeg} ${C}`}
-          transform="rotate(-90 150 150)"
-          style={{ "--shine-end": `${-Math.max(filledLen - shineSeg, 0)}px` }}
-        />
-      )}
       {pct > 0 && pct < 100 && (
         <circle className="tip" cx={tipX} cy={tipY} r="9" />
       )}
@@ -141,23 +161,26 @@ function ProgressRing({ percent, paused }) {
   );
 }
 
-function QuickRow({ session: s, activeId, activeRunning, activeTimerSecs, savedSecs }) {
+function QuickRow({ session: s, order, isFlex, activeId, activeRunning, activeTimerSecs, savedSecs }) {
   const { startSession } = useTimer();
   const isActive   = activeId === s.id;
   const isLive     = isActive && activeRunning;             // light orange ONLY while running
   const liveExtra  = isActive ? activeTimerSecs : 0;
   const studiedSec = savedSecs + liveExtra;
-  const sessSec    = duration(s.start, s.end) * 60;
+  const sessSec    = (Number(s.durationMins) > 0 ? Number(s.durationMins) * 60 : duration(s.start, s.end) * 60);
   const pct        = sessSec > 0 ? Math.min(100, Math.round((studiedSec / sessSec) * 100)) : 0;
   const isDone     = sessSec > 0 && studiedSec >= sessSec;
 
   const cls = `stp-quick-row${isLive ? " active" : ""}${isDone ? " done" : ""}`;
+  const meta = isFlex
+    ? `Session ${order} · ${formatHM(studiedSec)} / ${formatHM(sessSec)}`
+    : `${fmt12(s.start)} – ${fmt12(s.end)} · ${formatHM(studiedSec)} / ${formatHM(sessSec)}`;
 
   return (
     <div className={cls}>
       <div className="info">
         <div className="name">{s.name}</div>
-        <div className="meta">{fmt12(s.start)} – {fmt12(s.end)} · {formatHM(studiedSec)} / {formatHM(sessSec)}</div>
+        <div className="meta">{meta}</div>
         <div className="stp-quick-progress"><div className="fill" style={{ width: `${pct}%` }} /></div>
         <div className="pct">{pct}% studied</div>
       </div>

@@ -22,19 +22,23 @@ function fmtDate(d) {
 
 export default function WastageHistory({ activeSessions = [] }) {
   const { user } = useAuth();
-  const { showToast, setWastageHistory } = useStore();
+  const { showToast, setWastageHistory, currentExamId, currentPlanId } = useStore();
   const [history,  setHistory]  = useState({});
   const [selected, setSelected] = useState(null);
   const [expanded, setExpanded] = useState(null);
 
   useEffect(() => {
-    if (!user) return;
-    const unsub = listenWastage(user.uid, (data) => {
+    if (!user || !currentExamId || !currentPlanId) {
+      setHistory({});
+      setWastageHistory({});
+      return;
+    }
+    const unsub = listenWastage(user.uid, currentExamId, currentPlanId, (data) => {
       setHistory(data);
       setWastageHistory(data);
     });
     return () => unsub();
-  }, [user]); // eslint-disable-line
+  }, [user, currentExamId, currentPlanId]); // eslint-disable-line
 
   const dates = useMemo(() => Object.keys(history).sort((a, b) => b.localeCompare(a)), [history]);
 
@@ -53,18 +57,19 @@ export default function WastageHistory({ activeSessions = [] }) {
   const totalMins   = dayTotals.reduce((a, d) => a + d.mins, 0);
 
   async function handleRemoveSelected() {
-    if (!selected || !user) return;
+    if (!selected || !user || !currentExamId || !currentPlanId) return;
     if (!confirm(`Remove wastage entry for ${selected}?`)) return;
-    await deleteWastage(user.uid, selected);
+    await deleteWastage(user.uid, currentExamId, currentPlanId, selected);
     setSelected(null);
     showToast(`Removed entry for ${selected}`);
   }
 
   async function handleResetAll() {
-    if (!user || !confirm("Reset ALL wastage history? This cannot be undone.")) return;
-    await deleteAllWastage(user.uid);
+    if (!user || !currentExamId || !currentPlanId) return;
+    if (!confirm("Reset ALL wastage history for this plan? This cannot be undone.")) return;
+    await deleteAllWastage(user.uid, currentExamId, currentPlanId);
     setSelected(null);
-    showToast("All wastage history cleared");
+    showToast("Wastage history cleared for this plan");
   }
 
   if (!user) return (

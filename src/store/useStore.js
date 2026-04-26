@@ -25,6 +25,9 @@ const useStore = create((set) => ({
   setCurrentPlanId: (currentPlanId) => set({ currentPlanId }),
   currentPlanName: "",
   setCurrentPlanName: (currentPlanName) => set({ currentPlanName }),
+  // "fixed" (timeline / wastage) | "flexible" (ordered tasks / insights)
+  currentPlanMode: "fixed",
+  setCurrentPlanMode: (currentPlanMode) => set({ currentPlanMode }),
 
   // ── Active Timer Session ──────────────────
   activeSession: null,

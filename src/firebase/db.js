@@ -44,8 +44,9 @@ export async function getExams(uid) {
   })).sort((a, b) => a.createdAt - b.createdAt);
 }
 
-export function deleteExam(uid, examId) {
-  return remove(ref(db, `exams/${uid}/${examId}`));
+export async function deleteExam(uid, examId) {
+  await remove(ref(db, `exams/${uid}/${examId}`));
+  await remove(ref(db, `wastage/${uid}/${examId}`));
 }
 
 export function renameExam(uid, examId, name) {
@@ -83,12 +84,29 @@ export async function getPlans(uid, examId) {
   })).sort((a, b) => a.createdAt - b.createdAt);
 }
 
-export function deletePlanFromExam(uid, examId, planId) {
-  return remove(ref(db, `exams/${uid}/${examId}/plans/${planId}`));
+export async function deletePlanFromExam(uid, examId, planId) {
+  await remove(ref(db, `exams/${uid}/${examId}/plans/${planId}`));
+  await remove(ref(db, `wastage/${uid}/${examId}/${planId}`));
 }
 
 export function renamePlan(uid, examId, planId, name) {
   return update(ref(db, `exams/${uid}/${examId}/plans/${planId}`), { name });
+}
+
+export function setPlanMode(uid, examId, planId, mode) {
+  return update(ref(db, `exams/${uid}/${examId}/plans/${planId}`), { mode });
+}
+
+export function getPlanMode(uid, examId, planId) {
+  return get(ref(db, `exams/${uid}/${examId}/plans/${planId}/mode`))
+    .then(snap => snap.val() || "fixed");
+}
+
+export function listenPlanMode(uid, examId, planId, callback) {
+  const r = ref(db, `exams/${uid}/${examId}/plans/${planId}/mode`);
+  const cb = snap => callback(snap.val() || "fixed");
+  onValue(r, cb);
+  return () => off(r, "value", cb);
 }
 
 // ── Sessions inside a plan ─────────────────────────────────────────
@@ -189,33 +207,52 @@ export function saveUser(uid, data) {
   return update(ref(db, `users/${uid}`), data);
 }
 
-// ── Wastage History ────────────────────────
-export function saveWastage(uid, date, data) {
-  // Merge into the existing day so switching plans (which have different
-  // session IDs) doesn't wipe out wastage records from another plan.
-  return update(ref(db, `wastage/${uid}/${date}`), data || {});
+// ── Wastage History (per-plan) ─────────────
+// Path: wastage/{uid}/{examId}/{planId}/{YYYY-MM-DD}/{sessionId}
+function wastagePath(uid, examId, planId, date) {
+  return `wastage/${uid}/${examId}/${planId}/${date}`;
 }
 
-export function deleteWastage(uid, date) {
-  return remove(ref(db, `wastage/${uid}/${date}`));
+export function saveWastage(uid, examId, planId, date, data) {
+  if (!examId || !planId) return Promise.resolve();
+  return update(ref(db, wastagePath(uid, examId, planId, date)), data || {});
 }
 
-export function deleteAllWastage(uid) {
-  return remove(ref(db, `wastage/${uid}`));
+export function deleteWastage(uid, examId, planId, date) {
+  return remove(ref(db, wastagePath(uid, examId, planId, date)));
 }
 
-export function listenWastage(uid, callback) {
-  const r = ref(db, `wastage/${uid}`);
+export function deleteAllWastage(uid, examId, planId) {
+  if (!examId || !planId) return remove(ref(db, `wastage/${uid}`));
+  return remove(ref(db, `wastage/${uid}/${examId}/${planId}`));
+}
+
+export function deleteWastageForExam(uid, examId) {
+  return remove(ref(db, `wastage/${uid}/${examId}`));
+}
+
+export function deleteWastageForPlan(uid, examId, planId) {
+  return remove(ref(db, `wastage/${uid}/${examId}/${planId}`));
+}
+
+export function listenWastage(uid, examId, planId, callback) {
+  if (!examId || !planId) { callback({}); return () => {}; }
+  const r = ref(db, `wastage/${uid}/${examId}/${planId}`);
   onValue(r, snap => callback(snap.val() || {}));
   return () => off(r);
 }
 
-export function getWastageDate(uid, date) {
-  return get(ref(db, `wastage/${uid}/${date}`)).then(snap => snap.val());
+export function getWastageDate(uid, examId, planId, date) {
+  return get(ref(db, wastagePath(uid, examId, planId, date))).then(snap => snap.val());
 }
 
-export function getWastageAll(uid) {
-  return get(ref(db, `wastage/${uid}`)).then(snap => snap.val() || {});
+export function getWastageAll(uid, examId, planId) {
+  // No exam/plan → return the whole tree (used by streak calc, which iterates
+  // every plan to figure out study days).
+  if (!examId || !planId) {
+    return get(ref(db, `wastage/${uid}`)).then(snap => snap.val() || {});
+  }
+  return get(ref(db, `wastage/${uid}/${examId}/${planId}`)).then(snap => snap.val() || {});
 }
 
 // ── User Settings ──────────────────────────

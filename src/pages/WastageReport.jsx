@@ -170,7 +170,7 @@ export default function WastageReport() {
     const snapshot  = buildSnapshot(planSessions, sessionStudied, activeSession, timerSeconds, nowMin, activatedAt);
     if (Object.keys(snapshot).length === 0) return;
 
-    saveWastage(user.uid, todayDate, snapshot)
+    saveWastage(user.uid, currentExamId, currentPlanId, todayDate, snapshot)
       .catch(err => console.error("[WastageReport] save (sessions) failed:", err));
 
     // Back-fill yesterday only if the plan was activated more than 24h ago.
@@ -178,13 +178,13 @@ export default function WastageReport() {
     if (!yesterdayDone.current && activatedAt && Date.now() - activatedAt > 86_400_000) {
       yesterdayDone.current = true;
       const yesterday = localDateStr(new Date(Date.now() - 86_400_000));
-      getWastageDate(user.uid, yesterday).then(existing => {
+      getWastageDate(user.uid, currentExamId, currentPlanId, yesterday).then(existing => {
         if (!existing) {
           const ySnap = {};
           planSessions.forEach(s => {
             ySnap[s.id] = { sessionName: s.name, subject: s.subject || s.name, duration: dur(s.start, s.end), missed: true };
           });
-          saveWastage(user.uid, yesterday, ySnap);
+          saveWastage(user.uid, currentExamId, currentPlanId, yesterday, ySnap);
         }
       });
     }
@@ -198,7 +198,7 @@ export default function WastageReport() {
       const todayDate = localDateStr(new Date());
       const snapshot  = buildSnapshot(planSessions, sessionStudied, activeSession, timerSeconds, nowMin, activatedAt);
       if (Object.keys(snapshot).length === 0) return;
-      saveWastage(user.uid, todayDate, snapshot)
+      saveWastage(user.uid, currentExamId, currentPlanId, todayDate, snapshot)
         .catch(err => console.error("[WastageReport] save (timer) failed:", err));
     }, 2_000);
 
@@ -225,7 +225,12 @@ export default function WastageReport() {
   const totalStudied = todayWastage.reduce((a, s) => a + s.studiedMins, 0);
   const missedCount  = todayWastage.filter(s => s.missed).length;
   const partialCount = todayWastage.filter(s => !s.missed).length;
-  const completedScheduled = planSessions.filter(s => toMin(s.end) <= nowMin).length;
+  // Only sessions whose slot ended *after* the plan was activated count toward
+  // today's tracked totals. Without the activatedAt gate, switching plans at
+  // night would mark every earlier slot as a silent "completed".
+  const completedScheduled = planSessions.filter(s =>
+    toMin(s.end) <= nowMin && (!activatedAt || endTimestampToday(s.end) >= activatedAt)
+  ).length;
   const completedFull = completedScheduled - todayWastage.length;
 
   const todayStr = new Date().toLocaleDateString(undefined, { weekday:"long", month:"long", day:"numeric" });

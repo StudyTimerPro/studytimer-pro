@@ -7,6 +7,7 @@ import {
   savePlanSession, updatePlanSession, deletePlanSession,
   exportPlan, importPlan,
   saveStudyProgress, getStudyProgress,
+  setPlanMode, listenPlanMode,
 } from "../firebase/db";
 import AIPlanModal from "../components/plan/AIPlanModal";
 import AddExamModal from "../components/plan/AddExamModal";
@@ -37,7 +38,10 @@ export default function TodaysPlan() {
     exams, setExams, currentExamId, setCurrentExamId, setCurrentExamName,
     plans, setPlans, currentPlanId, setCurrentPlanId, setCurrentPlanName,
     sessionStudied, setSessionStudied,
+    currentPlanMode, setCurrentPlanMode,
   } = useStore();
+  const isFlex = currentPlanMode === "flexible";
+  const [showModeSwitch, setShowModeSwitch] = useState(false);
 
   const [studiedLoaded, setStudiedLoaded] = useState(false);
   const isMobile = useIsMobile();
@@ -125,6 +129,19 @@ export default function TodaysPlan() {
     window.addEventListener("beforeunload", handleUnload);
     return () => window.removeEventListener("beforeunload", handleUnload);
   }, [user]); // eslint-disable-line
+
+  // ── Flex-mode ordered session list ─────────────────────────────────────────
+  // In flex mode every session is created with start "00:00" so the default
+  // listenPlanSessions sort collapses; reorder by createdAt instead.
+  const flexSessions = useMemo(() => {
+    if (!isFlex) return [];
+    return [...sessions].sort((a, b) => {
+      const ca = Number(a.createdAt) || 0;
+      const cb = Number(b.createdAt) || 0;
+      if (ca !== cb) return ca - cb;
+      return (a.id || "").localeCompare(b.id || "");
+    });
+  }, [sessions, isFlex]);
 
   // ── Derived stats ──────────────────────────────────────────────────────────
   const totalMins = useMemo(
@@ -377,12 +394,32 @@ export default function TodaysPlan() {
     return () => unsub();
   }, [user, currentExamId, currentPlanId]);
 
+  // Sync plan mode → store, so the Navbar tab label and report tab can react.
+  useEffect(() => {
+    if (!user || !currentExamId || !currentPlanId) { setCurrentPlanMode("fixed"); return; }
+    const unsub = listenPlanMode(user.uid, currentExamId, currentPlanId, setCurrentPlanMode);
+    return () => unsub();
+  }, [user, currentExamId, currentPlanId]);
+
+  async function handleSwitchMode(nextMode) {
+    if (!user || !currentExamId || !currentPlanId) return;
+    await setPlanMode(user.uid, currentExamId, currentPlanId, nextMode);
+    setCurrentPlanMode(nextMode);
+    setShowModeSwitch(false);
+    showToast(nextMode === "flexible" ? "Switched to Flexible mode" : "Switched to Fixed mode");
+  }
+
   function defaultForm() {
-    return { name:"", subject:"", priority:"medium", material:"", start:"06:00", end:"06:30", breakMins:10 };
+    return { name:"", subject:"", priority:"medium", material:"", start:"06:00", end:"06:30", breakMins:10, durationMins: 40 };
   }
   function openAdd() { setForm(defaultForm()); setEditingId(null); setModalOpen(true); }
   function openEdit(s) {
-    setForm({ name:s.name, subject:s.subject||"", priority:s.priority, material:s.material||"", start:s.start, end:s.end, breakMins:s.breakMins||0 });
+    setForm({
+      name:s.name, subject:s.subject||"", priority:s.priority, material:s.material||"",
+      start:s.start || "06:00", end:s.end || "06:30",
+      breakMins:s.breakMins||0,
+      durationMins: s.durationMins || duration(s.start || "00:00", s.end || "00:40") || 40,
+    });
     setEditingId(s.id); setModalOpen(true);
   }
 
@@ -391,8 +428,26 @@ export default function TodaysPlan() {
     if (!currentExamId)          { showToast("Add an exam first"); return; }
     if (!currentPlanId)          { showToast("Create or select a plan first"); return; }
     if (!form.name.trim())       { showToast("Session name required"); return; }
-    if (form.start >= form.end)  { showToast("End time must be after start"); return; }
-    const data = { ...form, createdAt: Date.now() };
+
+    let data;
+    if (isFlex) {
+      const mins = Math.max(1, Number(form.durationMins) || 0);
+      // Synthesize start/end so existing duration() / timer code keeps working.
+      const synthEnd = `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
+      data = {
+        name: form.name, subject: form.subject || "",
+        priority: form.priority, material: form.material || "",
+        durationMins: mins,
+        start: "00:00", end: synthEnd,
+        breakMins: 0,
+        createdAt: Date.now(),
+      };
+    } else {
+      if (form.start >= form.end) { showToast("End time must be after start"); return; }
+      data = { ...form, createdAt: Date.now() };
+      delete data.durationMins;
+    }
+
     if (editingId) { await updatePlanSession(user.uid, currentExamId, currentPlanId, editingId, data); showToast("Session updated ✓"); }
     else           { await savePlanSession(user.uid, currentExamId, currentPlanId, data);              showToast("Session added ✓"); }
     setModalOpen(false);
@@ -476,17 +531,25 @@ export default function TodaysPlan() {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
               Add session
             </button>
+            {hasPlan && (
+              <button className="stp-btn" onClick={() => setShowModeSwitch(true)} title="Change study mode">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>
+                {isFlex ? "Flexible" : "Fixed"} mode
+              </button>
+            )}
           </div>
-          <div className="stp-seg">
-            <button className={view === "timeline" ? "on" : ""} onClick={() => setView("timeline")}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>
-              Timeline
-            </button>
-            <button className={view === "table" ? "on" : ""} onClick={() => setView("table")}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3h18v18H3zM3 9h18M3 15h18M9 3v18"/></svg>
-              Table
-            </button>
-          </div>
+          {!isFlex && (
+            <div className="stp-seg">
+              <button className={view === "timeline" ? "on" : ""} onClick={() => setView("timeline")}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>
+                Timeline
+              </button>
+              <button className={view === "table" ? "on" : ""} onClick={() => setView("table")}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3h18v18H3zM3 9h18M3 15h18M9 3v18"/></svg>
+                Table
+              </button>
+            </div>
+          )}
         </div>
 
         {/* EMPTY STATES */}
@@ -509,8 +572,32 @@ export default function TodaysPlan() {
           </div>
         )}
 
+        {/* FLEX-MODE ORDERED LIST */}
+        {hasPlan && isFlex && (
+          flexSessions.length === 0 ? (
+            <div className="stp-empty">
+              <h3>No sessions yet</h3>
+              <p>Add your first flexible-mode session for this plan.</p>
+              <button className="stp-btn primary" onClick={openAdd}>＋ Add session</button>
+            </div>
+          ) : (
+            <FlexSessionList
+              sessions={flexSessions}
+              activeSession={activeSession}
+              timerSeconds={timerSeconds}
+              timerRunning={timerRunning}
+              sessionStudied={sessionStudied}
+              onStart={startSession}
+              onPause={pause}
+              onEdit={openEdit}
+              onDelete={handleDelete}
+              formatTime={formatTime}
+            />
+          )
+        )}
+
         {/* TIMELINE VIEW */}
-        {hasPlan && view === "timeline" && (
+        {hasPlan && !isFlex && view === "timeline" && (
           sessions.length === 0 ? (
             <div className="stp-empty">
               <h3>No sessions yet</h3>
@@ -672,7 +759,7 @@ export default function TodaysPlan() {
         )}
 
         {/* TABLE VIEW */}
-        {hasPlan && view === "table" && (
+        {hasPlan && !isFlex && view === "table" && (
           <div className="stp-table-wrap">
             <table className="stp-table">
               <thead>
@@ -744,6 +831,51 @@ export default function TodaysPlan() {
         />
       )}
 
+      {/* MODE-SWITCH CONFIRMATION DIALOG */}
+      {showModeSwitch && (
+        <div className="stp-scrim" onClick={(e) => e.target === e.currentTarget && setShowModeSwitch(false)}>
+          <div className="stp-modal" style={{ maxWidth: 460 }}>
+            <div className="stp-modal-head">
+              <div>
+                <h3>Change <em>study mode</em></h3>
+                <div className="sub">Switching mode changes how this plan and its report work.</div>
+              </div>
+              <button className="stp-act" onClick={() => setShowModeSwitch(false)}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+            <div className="stp-modal-body">
+              <div className="stp-mode-grid">
+                <button
+                  className={`stp-mode-card${!isFlex ? " on" : ""}`}
+                  onClick={() => handleSwitchMode("fixed")}
+                >
+                  <div className="stp-mode-ic">⏰</div>
+                  <div className="stp-mode-name">Fixed</div>
+                  <div className="stp-mode-desc">Timeline with start/end times. Tracks wastage when slots end.</div>
+                </button>
+                <button
+                  className={`stp-mode-card${isFlex ? " on" : ""}`}
+                  onClick={() => handleSwitchMode("flexible")}
+                >
+                  <div className="stp-mode-ic">🌊</div>
+                  <div className="stp-mode-name">Flexible</div>
+                  <div className="stp-mode-desc">Ordered tasks by duration. Insights replace wastage.</div>
+                </button>
+              </div>
+            </div>
+            <div className="stp-modal-foot">
+              <span style={{ fontSize: 12, color: "var(--ink2)" }}>
+                Currently: <b>{isFlex ? "Flexible" : "Fixed"}</b>
+              </span>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="stp-btn" onClick={() => setShowModeSwitch(false)}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ADD / EDIT MODAL */}
       {modalOpen && (
         <div className="stp-scrim" onClick={(e) => e.target === e.currentTarget && setModalOpen(false)}>
@@ -781,17 +913,31 @@ export default function TodaysPlan() {
                 <Field label="Material">
                   <input className="stp-input" value={form.material} onChange={e => setForm({ ...form, material: e.target.value })} placeholder="e.g. Chapter 3" />
                 </Field>
-                <Field label="Start">
-                  <input type="time" className="stp-input" value={form.start} onChange={e => setForm({ ...form, start: e.target.value })} />
-                </Field>
-                <Field label="End">
-                  <input type="time" className="stp-input" value={form.end} onChange={e => setForm({ ...form, end: e.target.value })} />
-                </Field>
+                {isFlex ? (
+                  <Field label="Duration (minutes)">
+                    <input
+                      type="number" min="1" max="600" className="stp-input"
+                      value={form.durationMins}
+                      onChange={e => setForm({ ...form, durationMins: parseInt(e.target.value) || 0 })}
+                    />
+                  </Field>
+                ) : (
+                  <>
+                    <Field label="Start">
+                      <input type="time" className="stp-input" value={form.start} onChange={e => setForm({ ...form, start: e.target.value })} />
+                    </Field>
+                    <Field label="End">
+                      <input type="time" className="stp-input" value={form.end} onChange={e => setForm({ ...form, end: e.target.value })} />
+                    </Field>
+                  </>
+                )}
               </div>
-              <Field label="Break after (minutes)">
-                <input type="number" min="0" max="60" className="stp-input" value={form.breakMins}
-                       onChange={e => setForm({ ...form, breakMins: parseInt(e.target.value) || 0 })} />
-              </Field>
+              {!isFlex && (
+                <Field label="Break after (minutes)">
+                  <input type="number" min="0" max="60" className="stp-input" value={form.breakMins}
+                         onChange={e => setForm({ ...form, breakMins: parseInt(e.target.value) || 0 })} />
+                </Field>
+              )}
             </div>
 
             <div className="stp-modal-foot">
@@ -878,3 +1024,109 @@ function addMins(t, mins) {
 }
 function toMin(t) { const [h,m] = t.split(":").map(Number); return h*60+m; }
 function fmtMin(m) { if (m < 60) return `${m}m`; const h = Math.floor(m/60), mm = m%60; return mm ? `${h}h ${mm}m` : `${h}h`; }
+
+/* ---------- Flex-mode ordered session list ---------- */
+function FlexSessionList({
+  sessions, activeSession, timerSeconds, timerRunning, sessionStudied,
+  onStart, onPause, onEdit, onDelete, formatTime,
+}) {
+  // Pre-compute studied seconds + "any later started" flag for skip detection.
+  const rows = [];
+  let laterStarted = false;
+  const studiedById = {};
+  sessions.forEach(s => {
+    const live = activeSession?.id === s.id ? Number(timerSeconds || 0) : 0;
+    studiedById[s.id] = Math.max(Number(sessionStudied[s.id] || 0), 0) + live;
+  });
+  for (let i = sessions.length - 1; i >= 0; i--) {
+    const s = sessions[i];
+    const studied = studiedById[s.id];
+    const durMins = Number(s.durationMins) || duration(s.start || "00:00", s.end || "00:00");
+    const durSecs = durMins * 60;
+    const isLive = activeSession?.id === s.id;
+    const isFull = durSecs > 0 && studied >= durSecs && !(isLive && timerRunning);
+    let status;
+    if (isFull) status = "completed";
+    else if (isLive) status = "active";
+    else if (studied > 0) status = laterStarted ? "partial" : "active";
+    else if (laterStarted) status = "skipped";
+    else status = "pending";
+    rows.unshift({ s, studied, durMins, durSecs, isLive, status });
+    if (studied > 0) laterStarted = true;
+  }
+
+  return (
+    <div className="stp-flex-list">
+      {rows.map((r, i) => {
+        const studiedMins = Math.floor(r.studied / 60);
+        const pct = r.durMins > 0 ? Math.min(100, Math.round((studiedMins / r.durMins) * 100)) : 0;
+        const meta = FLEX_STATUS[r.status];
+        const isLive = r.isLive && timerRunning;
+        return (
+          <div key={r.s.id} className={`stp-flex-card ${r.status}${isLive ? " live" : ""}`}>
+            <div className="stp-flex-num">#{i + 1}</div>
+            <div className="stp-flex-body">
+              <div className="stp-flex-top">
+                <span className={`stp-pri ${priClass(r.s.priority)}`}>
+                  <span>{priLabel(r.s.priority)}</span>
+                  <span className="stp-pri-crown">♛</span>
+                </span>
+                {(r.s.subject || r.s.material) && (
+                  <>
+                    <span className="stp-sep-dot" />
+                    <span className="stp-subject">{[r.s.subject, r.s.material].filter(Boolean).join(" · ")}</span>
+                  </>
+                )}
+                <span className={`stp-flex-status ${r.status}`} style={{ marginLeft: "auto" }}>
+                  <span aria-hidden>{meta.ic}</span> {isLive ? `LIVE · ${formatTime(timerSeconds)}` : meta.label}
+                </span>
+              </div>
+              <div className={`stp-title${r.status === "completed" ? " strikethrough" : ""}`}>{r.s.name}</div>
+              <div className="stp-meta">
+                <span className="stp-dur-chip">{minsToHM(r.durMins)}</span>
+                {studiedMins > 0 && <span>Studied <b>{minsToHM(studiedMins)}</b></span>}
+                <span style={{ color: "var(--ink3)" }}>{pct}%</span>
+              </div>
+              <div style={{ marginTop: 8, height: 6, background: "var(--chip)", borderRadius: 999, overflow: "hidden" }}>
+                <div style={{
+                  width: `${pct}%`, height: "100%",
+                  background: meta.bar,
+                  transition: "width .4s",
+                }} />
+              </div>
+            </div>
+            <div className="stp-actions">
+              {isLive ? (
+                <button className="stp-act play" title="Pause" style={{ background: "var(--warn)", borderColor: "var(--warn)" }} onClick={onPause}>
+                  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                </button>
+              ) : (
+                <button
+                  className={`stp-act play${r.status === "pending" || r.status === "active" ? " glow" : ""}`}
+                  title={r.status === "completed" ? "Restart" : "Start"}
+                  onClick={() => onStart(r.s)}
+                >
+                  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                </button>
+              )}
+              <button className="stp-act" title="Edit" onClick={() => onEdit(r.s)}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              </button>
+              <button className="stp-act danger" title="Delete" onClick={() => onDelete(r.s.id)}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+const FLEX_STATUS = {
+  completed: { ic: "✅", label: "Completed",  bar: "#4CAF50" },
+  partial:   { ic: "⚠️", label: "Partial",    bar: "linear-gradient(90deg,#E4A62A,#E57373)" },
+  skipped:   { ic: "❌", label: "Skipped",    bar: "#E57373" },
+  pending:   { ic: "⌛", label: "Pending",    bar: "var(--ink3)" },
+  active:    { ic: "▶️", label: "In progress", bar: "#4E6B52" },
+};
