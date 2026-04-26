@@ -1,20 +1,25 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { listenWastage, deleteWastage, deleteAllWastage } from "../firebase/db";
 import useStore from "../store/useStore";
-import WastageHistoryTable from "./plan/WastageHistoryTable";
 
+function toHM(mins) {
+  const m = Math.max(0, Math.round(mins || 0));
+  const h = Math.floor(m / 60), mm = m % 60;
+  if (h <= 0) return `${mm}m`;
+  return mm === 0 ? `${h}h` : `${h}h ${mm}m`;
+}
 function toHHMMSS(mins) {
   const m = mins || 0;
   const h = Math.floor(m / 60), mm = m % 60;
   return `${String(h).padStart(2, "0")}:${String(mm).padStart(2, "0")}:00`;
 }
+function fmtDate(d) {
+  const dt = new Date(d + "T00:00:00");
+  if (isNaN(dt)) return d;
+  return dt.toLocaleDateString(undefined, { month:"short", day:"numeric" });
+}
 
-/**
- * activeSessions: current plan's session objects { id, name, subject?, ... }
- * Used to determine which columns to show — only live sessions, no ghost columns
- * from deleted sessions.
- */
 export default function WastageHistory({ activeSessions = [] }) {
   const { user } = useAuth();
   const { showToast, setWastageHistory } = useStore();
@@ -28,27 +33,23 @@ export default function WastageHistory({ activeSessions = [] }) {
       setWastageHistory(data);
     });
     return () => unsub();
-  }, [user]);
+  }, [user]); // eslint-disable-line
 
-  const dates = Object.keys(history).sort((a, b) => b.localeCompare(a));
+  const dates = useMemo(() => Object.keys(history).sort((a, b) => b.localeCompare(a)), [history]);
 
-  // ── Session columns: ONLY from the current active plan ───────────────────
-  // Using activeSessions prop means deleted/renamed sessions won't ghost as columns.
-  // Deduplicate by key in case two sessions share a subject.
-  const sessionKeys = [];
-  const seen = new Set();
-  activeSessions.forEach(s => {
-    const key = s.subject || s.name;
-    if (key && !seen.has(key)) { seen.add(key); sessionKeys.push(key); }
-  });
+  const dayTotals = useMemo(() => {
+    return dates.map(d => {
+      const entries = Object.values(history[d] || {});
+      const mins   = entries.reduce((a, s) => a + (s.duration || 0), 0);
+      const missed = entries.filter(s => s.missed).length;
+      const partial = entries.filter(s => !s.missed && (s.duration || 0) > 0).length;
+      return { date: d, mins, missed, partial, count: entries.length };
+    });
+  }, [history, dates]);
 
-  // ── Totals: sum ALL wastage duration (missed + partial) ──────────────────
-  // Previously filtered to s.missed only — wrong now that duration = actual wastage.
-  const totalMissed = dates.reduce((acc, d) =>
-    acc + Object.values(history[d] || {}).filter(s => s.missed).length, 0);
-
-  const totalMins = dates.reduce((acc, d) =>
-    acc + Object.values(history[d] || {}).reduce((a, s) => a + (s.duration || 0), 0), 0);
+  const maxMins = Math.max(1, ...dayTotals.map(d => d.mins));
+  const totalMissed = dayTotals.reduce((a, d) => a + d.missed, 0);
+  const totalMins   = dayTotals.reduce((a, d) => a + d.mins, 0);
 
   async function handleRemoveSelected() {
     if (!selected || !user) return;
@@ -66,48 +67,78 @@ export default function WastageHistory({ activeSessions = [] }) {
   }
 
   if (!user) return (
-    <p style={{ textAlign: "center", color: "var(--ink2)", padding: 24 }}>
+    <p style={{ textAlign:"center", color:"var(--ink2)", padding:24 }}>
       Sign in to see all-time history.
     </p>
   );
 
   return (
-    <div style={{ marginTop: 32 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
-        <h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--ink)" }}>All-Time Wastage By Date</h2>
-        <button onClick={handleRemoveSelected} disabled={!selected} style={outlineBtn(!selected)}>
-          Remove Selected {selected ? `(${selected})` : "Entry"}
-        </button>
+    <div className="stp-panel" style={{ marginTop:24 }}>
+      <div className="stp-panel-head">
+        <h3>All-time <em>wastage</em></h3>
+        <span className="badge">{dates.length} day{dates.length !== 1 ? "s" : ""}</span>
       </div>
 
-      <div style={{ overflowX: "auto", background: "var(--surface)", borderRadius: 10, border: "1px solid var(--border)", boxShadow: "var(--shadow)", marginBottom: 16 }}>
-        <WastageHistoryTable
-          history={history} dates={dates} sessionKeys={sessionKeys}
-          selected={selected} onSelect={setSelected}
-          totalMissed={totalMissed} totalMins={totalMins}
-        />
-      </div>
+      {dates.length === 0 ? (
+        <div style={{ textAlign:"center", padding:"32px 16px", color:"var(--ink2)" }}>
+          <div style={{ fontSize:32 }}>📊</div>
+          <p style={{ marginTop:8, fontSize:13 }}>No history yet — wastage rolls up here once sessions end.</p>
+        </div>
+      ) : (
+        <div>
+          {dayTotals.map(d => {
+            const pct = (d.mins / maxMins) * 100;
+            const isSel = selected === d.date;
+            return (
+              <div
+                key={d.date}
+                className="stp-bar-row"
+                onClick={() => setSelected(isSel ? null : d.date)}
+                style={{ cursor:"pointer", paddingLeft:8, paddingRight:8, borderRadius:8, background: isSel ? "var(--accent-bg)" : "transparent" }}
+              >
+                <div className="stp-bar-date">{fmtDate(d.date)}</div>
+                <div className="stp-bar-track">
+                  <div className="stp-bar-fill" style={{ width: `${pct}%` }} />
+                </div>
+                <div className="stp-bar-val">{toHM(d.mins)}</div>
+                <div style={{ width:78, textAlign:"right", fontSize:10, color:"var(--ink3)", fontFamily:"var(--mono)", letterSpacing:".06em", textTransform:"uppercase" }}>
+                  {d.missed}m · {d.partial}p
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
-        <p style={{ fontSize: 14, fontWeight: 600, color: "var(--ink)", margin: 0 }}>
-          Total wastage:{" "}
-          <span style={{ fontFamily: "monospace", color: "var(--red)" }}>{toHHMMSS(totalMins)}</span>
-          {" | "}Missed:{" "}
-          <span style={{ color: "var(--red)" }}>{totalMissed}</span>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:12, marginTop:16, paddingTop:14, borderTop:"1px solid var(--border)" }}>
+        <p style={{ fontSize:13, color:"var(--ink2)", margin:0 }}>
+          Total wasted{" "}
+          <span style={{ fontFamily:"var(--mono)", color:"#C62828", fontWeight:600 }}>{toHHMMSS(totalMins)}</span>
+          {"  ·  "}Missed{" "}
+          <span style={{ color:"#C62828", fontWeight:600 }}>{totalMissed}</span>
         </p>
-        <button onClick={handleResetAll} style={redBtn}>Reset All</button>
+        <div style={{ display:"flex", gap:8 }}>
+          <button onClick={handleRemoveSelected} disabled={!selected} style={outline(!selected)}>
+            Remove {selected ? `(${fmtDate(selected)})` : "selected"}
+          </button>
+          <button onClick={handleResetAll} style={red}>Reset all</button>
+        </div>
       </div>
     </div>
   );
 }
 
-const redBtn = { background: "var(--red)", color: "white", border: "none", borderRadius: 8, padding: "9px 20px", fontSize: 14, fontWeight: 500, cursor: "pointer" };
-function outlineBtn(disabled) {
+const red = {
+  background:"#C62828", color:"#fff", border:"none", borderRadius:8,
+  padding:"8px 16px", fontSize:12, fontWeight:600, cursor:"pointer",
+  letterSpacing:".02em",
+};
+function outline(disabled) {
   return {
     background: disabled ? "var(--bg)" : "var(--surface)",
-    color: disabled ? "var(--ink2)" : "var(--red)",
-    border: `1.5px solid ${disabled ? "var(--border)" : "var(--red)"}`,
-    borderRadius: 8, padding: "9px 20px", fontSize: 13, fontWeight: 500,
+    color: disabled ? "var(--ink3)" : "#C62828",
+    border: `1px solid ${disabled ? "var(--border)" : "#E57373"}`,
+    borderRadius:8, padding:"8px 16px", fontSize:12, fontWeight:600,
     cursor: disabled ? "not-allowed" : "pointer",
   };
 }

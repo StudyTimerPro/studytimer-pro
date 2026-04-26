@@ -2,78 +2,122 @@ import React, { useEffect } from "react";
 import { listenLeaderboard } from "../firebase/db";
 import useStore from "../store/useStore";
 
+const AVATARS = ["😀","😎","🧑","👩","🧠"];
+
 export default function Leaderboard() {
   const { leaderboard, setLeaderboard } = useStore();
 
   useEffect(() => {
     const unsub = listenLeaderboard(setLeaderboard);
     return () => unsub();
-  }, []);
+  }, []); // eslint-disable-line
 
   const onlineCount = leaderboard.filter(u => u.status === "Online").length;
+  const top3 = leaderboard.slice(0, 3);
+  const rest = leaderboard.slice(3);
 
   return (
-    <div style={{ flex: 1, overflowY: "auto", padding: "24px 16px" }}>
-      <div style={{ display: "flex", gap: 16, marginBottom: 20, flexWrap: "wrap" }}>
-        <Chip label="Total Users" value={leaderboard.length} />
-        <Chip label="Online Now"  value={onlineCount} color="var(--accent)" />
-      </div>
-
-      {leaderboard.length === 0 ? (
-        <div style={{ textAlign: "center", padding: 48, color: "var(--ink2)" }}>
-          <div style={{ fontSize: 40 }}>🏆</div>
-          <p style={{ marginTop: 12 }}>No leaderboard data yet.</p>
-        </div>
-      ) : leaderboard.map((u, i) => (
-        <LeaderCard key={i} user={u} rank={i + 1} />
-      ))}
-
-      <div style={{ textAlign: "center", fontSize: 12, color: "var(--ink2)", marginTop: 16 }}>
-        Updates every 10 minutes · Total entries: {leaderboard.length} · Online: {onlineCount}
-      </div>
-    </div>
-  );
-}
-
-function LeaderCard({ user: u, rank }) {
-  const isOnline = u.status === "Online";
-  const avatars  = ["😀","😎","🧑","👩","🧠"];
-  const avatar   = avatars[(u.avatarId || 1) - 1] || "👤";
-
-  // Medal backgrounds — intentionally keep warm tones in both modes
-  let medal = "", cardBg = "var(--surface)", cardBorder = "var(--border)";
-  if (rank === 1) { medal = "🥇"; cardBg = "#ffeaa7"; cardBorder = "#f9ca24"; }
-  if (rank === 2) { medal = "🥈"; cardBg = "var(--bg)"; }
-  if (rank === 3) { medal = "🥉"; cardBg = "#fde3d8"; cardBorder = "#fab1a0"; }
-
-  return (
-    <div style={{
-      display: "flex", justifyContent: "space-between", alignItems: "center",
-      padding: "14px 18px", marginBottom: 8, borderRadius: 12,
-      background: cardBg, border: `1px solid ${cardBorder}`,
-      boxShadow: "var(--shadow)",
-    }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <div style={{ fontSize: 24 }}>{avatar}</div>
+    <div className="stp-content">
+      <section className="stp-hero">
         <div>
-          <div style={{ fontWeight: 600, fontSize: 14, color: "var(--ink)" }}>{medal} {u.name || "User"}</div>
-          <div style={{ fontSize: 12, color: isOnline ? "#27ae60" : "var(--ink2)", marginTop: 2 }}>
-            {isOnline ? "🟢 Online" : "⚫ Offline"}
+          <h1>Leader<em>board</em></h1>
+          <div className="stp-hero-sub">
+            Weekly study hours · refreshes every 10 minutes
           </div>
         </div>
-      </div>
-      <div style={{ fontFamily: "monospace", fontSize: 12, color: "var(--ink2)" }}>#{rank}</div>
-      <div style={{ fontFamily: "monospace", fontWeight: 700, fontSize: 15, color: "var(--accent)" }}>
-        {u.weekHours || 0}h
+        <div className="stp-stats">
+          <Stat label="Total"  value={leaderboard.length} />
+          <Stat label="Online" value={onlineCount} />
+          <Stat label="Top"    value={top3[0]?.weekHours || 0} unit="h" />
+        </div>
+      </section>
+
+      {leaderboard.length === 0 ? (
+        <div className="stp-groups-empty">
+          <div className="ic">🏆</div>
+          <h3>No <em>data</em> yet</h3>
+          <p>Be the first to log study hours this week.</p>
+        </div>
+      ) : (
+        <>
+          {/* Podium — top 3 */}
+          <div className="stp-podium">
+            {top3[1] ? <PodiumCard u={top3[1]} rank={2} /> : <PodiumPlaceholder rank={2} />}
+            {top3[0] ? <PodiumCard u={top3[0]} rank={1} /> : <PodiumPlaceholder rank={1} />}
+            {top3[2] ? <PodiumCard u={top3[2]} rank={3} /> : <PodiumPlaceholder rank={3} />}
+          </div>
+
+          {/* Remaining ranks */}
+          {rest.length > 0 && (
+            <div>
+              {rest.map((u, i) => <RankRow key={i} u={u} rank={i + 4} />)}
+            </div>
+          )}
+        </>
+      )}
+
+      <div style={{ textAlign:"center", fontSize:11, color:"var(--ink3)", marginTop:20, fontFamily:"var(--mono)", letterSpacing:".08em", textTransform:"uppercase" }}>
+        {leaderboard.length} entries · {onlineCount} online
       </div>
     </div>
   );
 }
 
-function Chip({ label, value, color = "var(--ink)" }) {
+function PodiumCard({ u, rank }) {
+  const tone   = rank === 1 ? "gold" : rank === 2 ? "silver" : "bronze";
+  const medal  = rank === 1 ? "🥇" : rank === 2 ? "🥈" : "🥉";
+  const avatar = AVATARS[(u.avatarId || 1) - 1] || "👤";
+  const isOnline = u.status === "Online";
   return (
-    <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 16px", fontSize: 13, fontFamily: "monospace", color: "var(--ink)" }}>
-      {label}: <span style={{ fontWeight: 700, color }}>{value}</span>
+    <div className={`stp-podium-card ${tone}`}>
+      <div className="medal">{medal}</div>
+      <div style={{ fontSize:24, marginTop:4 }}>{avatar}</div>
+      <div className="name">{u.name || "User"}</div>
+      <div className="hours">{u.weekHours || 0}h</div>
+      <div className="lbl">{isOnline ? "● Online" : "Offline"}</div>
+    </div>
+  );
+}
+
+function PodiumPlaceholder({ rank }) {
+  const tone  = rank === 1 ? "gold" : rank === 2 ? "silver" : "bronze";
+  const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : "🥉";
+  return (
+    <div className={`stp-podium-card ${tone}`} style={{ opacity:.55 }}>
+      <div className="medal">{medal}</div>
+      <div className="name">—</div>
+      <div className="hours">0h</div>
+      <div className="lbl">Open spot</div>
+    </div>
+  );
+}
+
+function RankRow({ u, rank }) {
+  const avatar   = AVATARS[(u.avatarId || 1) - 1] || "👤";
+  const isOnline = u.status === "Online";
+  return (
+    <div className="stp-rank-row">
+      <div className="rank">#{rank}</div>
+      <div className="who">
+        <div className="av">{avatar}</div>
+        <div style={{ minWidth:0 }}>
+          <div className="name">{u.name || "User"}</div>
+          <div className={`status${isOnline ? " online" : ""}`}>{isOnline ? "● Online" : "Offline"}</div>
+        </div>
+      </div>
+      <div className="hours">{u.weekHours || 0}h</div>
+    </div>
+  );
+}
+
+function Stat({ label, value, unit }) {
+  return (
+    <div className="stp-stat">
+      <div className="l">{label}</div>
+      <div className="v">
+        {value}
+        {unit && <span className="unit">{unit}</span>}
+      </div>
     </div>
   );
 }
