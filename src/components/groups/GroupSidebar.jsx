@@ -90,57 +90,54 @@ export default function GroupSidebar({ groups, selectedId, user, loading, onSele
   const createInitial = (form.name || "G").charAt(0).toUpperCase();
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: isMobile ? "100vh" : 500 }}>
-      <div style={{ padding: "16px 14px 10px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
-        <span style={{ fontWeight: 700, fontSize: 15, color: "var(--ink)" }}>👥 Your Groups</span>
-        {isMobile && <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: "var(--ink2)", padding: "2px 6px" }}>✕</button>}
+    <div style={{ display:"flex", flexDirection:"column", height:"100%", minHeight: isMobile ? "100vh" : 500 }}>
+      <div className="stp-gs-head">
+        <h2>Your <em>groups</em></h2>
+        {isMobile && <button onClick={onClose} className="stp-gs-close" aria-label="Close">✕</button>}
       </div>
 
-      <div style={{ padding: "10px 12px", display: "flex", gap: 8, flexShrink: 0 }}>
-        <button onClick={() => openModal("create")} style={actionBtn("var(--accent)")}>＋ New Group</button>
-        <button onClick={() => openModal("join")}   style={actionBtn("var(--nav-bg)")}>🔗 Join</button>
+      <div className="stp-gs-actions">
+        <button onClick={() => openModal("create")} className="stp-gs-btn primary">＋ New</button>
+        <button onClick={() => openModal("join")}   className="stp-gs-btn ghost">🔗 Join</button>
       </div>
 
-      <div style={{ padding: "0 12px 10px", flexShrink: 0 }}>
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search groups..." style={inputS} />
-      </div>
+      <input className="stp-gs-search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search groups…" />
 
-      <div style={{ flex: 1, overflowY: "auto" }}>
-        {loading && <p style={{ textAlign: "center", padding: 20, color: "var(--ink2)", fontSize: 13 }}>Loading...</p>}
+      <div style={{ flex:1, overflowY:"auto", paddingBottom:12 }}>
+        {loading && <p className="stp-gs-empty">Loading…</p>}
         {!loading && filtered.length === 0 && search.trim().length < 2 && (
-          <p style={{ textAlign: "center", padding: 24, color: "var(--ink2)", fontSize: 13 }}>{groups.length === 0 ? "No groups yet." : "No matches."}</p>
+          <p className="stp-gs-empty">{groups.length === 0 ? "No groups yet." : "No matches."}</p>
         )}
         {filtered.map(g => {
           const isActive = g.id === selectedId;
           const count    = g.members ? Object.keys(g.members).length : 0;
           return (
             <div key={g.id} onClick={() => onSelect(g.id)}
-              style={{ padding: "11px 14px", cursor: "pointer", borderBottom: "1px solid var(--border)", background: isActive ? "var(--accent-light)" : "var(--surface)", display: "flex", alignItems: "center", gap: 10 }}>
+              className={`stp-gs-row${isActive ? " active" : ""}`}>
               <GroupAvatar g={g} size={40} />
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontWeight: 600, fontSize: 14, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.name}</div>
-                <div style={{ fontSize: 11, color: "var(--ink2)", marginTop: 1 }}>{count} member{count !== 1 ? "s" : ""}</div>
+              <div style={{ minWidth:0, flex:1 }}>
+                <div className="nm">{g.name}</div>
+                <div className="meta">{count} member{count !== 1 ? "s" : ""}</div>
               </div>
-              {isActive && <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--accent)", flexShrink: 0 }} />}
+              {isActive && <div className="dot" />}
             </div>
           );
         })}
 
         {search.trim().length >= 2 && (
           <>
-            <div style={{ padding: "8px 14px", fontSize: 11, fontWeight: 700, color: "var(--ink2)", textTransform: "uppercase", borderTop: "1px solid var(--border)" }}>
-              {searching ? "Searching..." : `All Groups (${globalResults.length})`}
+            <div className="stp-gs-section">
+              {searching ? "Searching…" : `Discover (${globalResults.length})`}
             </div>
             {globalResults.map(g => {
               const sent = sentRequests.has(g.id);
               return (
-                <div key={g.id} style={{ padding: "10px 14px", borderBottom: "1px solid var(--border)", background: "var(--surface)" }}>
-                  <div style={{ fontWeight: 600, fontSize: 13, color: "var(--ink)" }}>{g.name}</div>
-                  {g.description && <div style={{ fontSize: 11, color: "var(--ink2)", marginTop: 2 }}>{g.description}</div>}
-                  <div style={{ fontSize: 11, color: "var(--ink2)", marginTop: 2 }}>{g.memberCount} member{g.memberCount !== 1 ? "s" : ""}</div>
-                  <button onClick={() => !sent && handleRequest(g.id)} disabled={sent}
-                    style={{ marginTop: 6, fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 6, border: "none", cursor: sent ? "default" : "pointer", background: sent ? "#d1fae5" : "var(--accent)", color: sent ? "var(--ink2)" : "white" }}>
-                    {sent ? "Request Sent ✓" : "Request to Join"}
+                <div key={g.id} className="stp-gs-discover">
+                  <div className="nm">{g.name}</div>
+                  {g.description && <div className="desc">{g.description}</div>}
+                  <div className="desc">{g.memberCount} member{g.memberCount !== 1 ? "s" : ""}</div>
+                  <button onClick={() => !sent && handleRequest(g.id)} disabled={sent} className="req">
+                    {sent ? "Request sent ✓" : "Request to join"}
                   </button>
                 </div>
               );
@@ -150,11 +147,10 @@ export default function GroupSidebar({ groups, selectedId, user, loading, onSele
       </div>
 
       {modal && (
-        <div onClick={e => e.target === e.currentTarget && setModal(null)}
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 400, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <div style={{ background: "var(--surface)", borderRadius: 14, padding: 24, width: "min(400px,92vw)", boxShadow: "0 20px 60px rgba(0,0,0,.2)" }}>
-            <h3 style={{ fontSize: 17, fontWeight: 700, marginBottom: 18, color: "var(--ink)" }}>
-              {modal === "create" ? "Create Group" : "Join by Invite Code"}
+        <div onClick={e => e.target === e.currentTarget && setModal(null)} className="stp-gs-modal-scrim">
+          <div className="stp-gs-modal">
+            <h3>
+              {modal === "create" ? <>Create <em>group</em></> : <>Join by <em>code</em></>}
             </h3>
             {modal === "create" ? (
               <>
@@ -193,11 +189,11 @@ export default function GroupSidebar({ groups, selectedId, user, loading, onSele
                   placeholder="e.g. ABC123" style={{ ...inputS, textTransform: "uppercase", letterSpacing: 3, fontFamily: "monospace" }} />
               </MField>
             )}
-            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 20 }}>
-              <button onClick={() => setModal(null)} style={cancelBtn}>Cancel</button>
+            <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:20 }}>
+              <button onClick={() => setModal(null)} className="stp-gs-btn ghost" style={{ flex: "0 0 auto", minWidth: 90 }}>Cancel</button>
               <button onClick={modal === "create" ? handleCreate : handleJoin} disabled={busy}
-                style={{ background: busy ? "var(--border)" : "var(--accent)", color: "white", border: "none", borderRadius: 8, padding: "9px 22px", fontSize: 14, fontWeight: 600, cursor: busy ? "not-allowed" : "pointer" }}>
-                {busy ? "..." : modal === "create" ? "Create" : "Join"}
+                className="stp-gs-btn primary" style={{ flex: "0 0 auto", minWidth: 110, opacity: busy ? .55 : 1 }}>
+                {busy ? "…" : modal === "create" ? "Create" : "Join"}
               </button>
             </div>
           </div>

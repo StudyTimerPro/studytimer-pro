@@ -40,12 +40,20 @@ function localDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+function endTimestampToday(endHHMM) {
+  const [h, m] = endHHMM.split(":").map(Number);
+  const d = new Date();
+  d.setHours(h, m, 0, 0);
+  return d.getTime();
+}
+
 // ─── Display: which sessions have wastage right now ───────────────────────────
-function calcWastage(sessions, studiedSecsMap, nowMin) {
+function calcWastage(sessions, studiedSecsMap, nowMin, activatedAt) {
   const result = [];
   for (const s of sessions) {
     if (!s.start || !s.end) continue;
     if (toMin(s.end) > nowMin) continue;
+    if (activatedAt && endTimestampToday(s.end) < activatedAt) continue; // not active when slot ended
     const durMins     = dur(s.start, s.end);
     const studiedSecs = Math.max(Number(studiedSecsMap[s.id] || 0), 0);
     const studiedMins = Math.floor(studiedSecs / 60);
@@ -56,11 +64,12 @@ function calcWastage(sessions, studiedSecsMap, nowMin) {
   return result;
 }
 
-function buildSnapshot(planSessions, studiedSecsMap, activeSession, timerSeconds, nowMin) {
+function buildSnapshot(planSessions, studiedSecsMap, activeSession, timerSeconds, nowMin, activatedAt) {
   const snapshot = {};
   for (const s of planSessions) {
     if (!s.start || !s.end) continue;
     if (toMin(s.end) > nowMin) continue;
+    if (activatedAt && endTimestampToday(s.end) < activatedAt) continue;
     const durMins     = dur(s.start, s.end);
     const liveSecs    = activeSession?.id === s.id ? Number(timerSeconds || 0) : 0;
     const totalSecs   = Math.max(Number(studiedSecsMap[s.id] || 0), 0) + liveSecs;
@@ -89,6 +98,7 @@ export default function WastageReport() {
   const [planSessions,  setPlanSessions]  = useState([]);
   const [selectedId,    setSelectedId]    = useState(null);
   const [studiedLoaded, setStudiedLoaded] = useState(false);
+  const [activatedAt,   setActivatedAt]   = useState(0);
   const [nowMin, setNowMin] = useState(() => {
     const n = new Date(); return n.getHours() * 60 + n.getMinutes();
   });
@@ -126,6 +136,18 @@ export default function WastageReport() {
       .catch(() => setStudiedLoaded(true));
   }, [user]); // eslint-disable-line
 
+  // Per-plan activation timestamp (shared key with TodaysPlan)
+  useEffect(() => {
+    if (!user || !currentPlanId || typeof window === "undefined") { setActivatedAt(0); return; }
+    const key = `stp:planActivated:${user.uid}:${currentPlanId}`;
+    let saved = Number(window.localStorage.getItem(key)) || 0;
+    if (!saved) {
+      saved = Date.now();
+      try { window.localStorage.setItem(key, String(saved)); } catch {}
+    }
+    setActivatedAt(saved);
+  }, [user, currentPlanId]);
+
   useEffect(() => {
     if (!user || !currentExamId || !currentPlanId) {
       setPlanSessions([]);
@@ -145,13 +167,15 @@ export default function WastageReport() {
     if (!studiedLoaded || planSessions.length === 0) return;
 
     const todayDate = localDateStr(new Date());
-    const snapshot  = buildSnapshot(planSessions, sessionStudied, activeSession, timerSeconds, nowMin);
+    const snapshot  = buildSnapshot(planSessions, sessionStudied, activeSession, timerSeconds, nowMin, activatedAt);
     if (Object.keys(snapshot).length === 0) return;
 
     saveWastage(user.uid, todayDate, snapshot)
       .catch(err => console.error("[WastageReport] save (sessions) failed:", err));
 
-    if (!yesterdayDone.current) {
+    // Back-fill yesterday only if the plan was activated more than 24h ago.
+    // Without this, switching plans at night fabricates a fully-missed yesterday row.
+    if (!yesterdayDone.current && activatedAt && Date.now() - activatedAt > 86_400_000) {
       yesterdayDone.current = true;
       const yesterday = localDateStr(new Date(Date.now() - 86_400_000));
       getWastageDate(user.uid, yesterday).then(existing => {
@@ -172,7 +196,7 @@ export default function WastageReport() {
 
     const tid = setTimeout(() => {
       const todayDate = localDateStr(new Date());
-      const snapshot  = buildSnapshot(planSessions, sessionStudied, activeSession, timerSeconds, nowMin);
+      const snapshot  = buildSnapshot(planSessions, sessionStudied, activeSession, timerSeconds, nowMin, activatedAt);
       if (Object.keys(snapshot).length === 0) return;
       saveWastage(user.uid, todayDate, snapshot)
         .catch(err => console.error("[WastageReport] save (timer) failed:", err));
@@ -196,7 +220,7 @@ export default function WastageReport() {
       studiedSecsForDisplay[s.id] = Math.max(Number(sessionStudied[s.id] || 0), 0) + liveSecs;
     }
   }
-  const todayWastage = studiedLoaded ? calcWastage(planSessions, studiedSecsForDisplay, nowMin) : [];
+  const todayWastage = studiedLoaded ? calcWastage(planSessions, studiedSecsForDisplay, nowMin, activatedAt) : [];
   const totalWastage = todayWastage.reduce((a, s) => a + s.wastageMins, 0);
   const totalStudied = todayWastage.reduce((a, s) => a + s.studiedMins, 0);
   const missedCount  = todayWastage.filter(s => s.missed).length;

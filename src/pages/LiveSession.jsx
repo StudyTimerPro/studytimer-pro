@@ -3,7 +3,7 @@ import { useTimer } from "../hooks/useTimer";
 import useStore from "../store/useStore";
 
 export default function LiveSession() {
-  const { timerSeconds, timerRunning, activeSession, start, pause, reset, formatTime } = useTimer();
+  const { timerSeconds, timerRunning, activeSession, start, pause, formatTime } = useTimer();
   const sessions      = useStore((s) => s.sessions);
   const sessionStudied = useStore((s) => s.sessionStudied);
 
@@ -26,10 +26,6 @@ export default function LiveSession() {
               ? <>Tracking <b>{activeSession.name}</b> · {fmt12(activeSession.start)} – {fmt12(activeSession.end)}</>
               : <>No session active. Pick one below or start one from Today's Plan.</>}
           </div>
-        </div>
-        <div className="stp-stats">
-          <Stat label="Studied"   value={formatTime(studiedSecs)} />
-          <Stat label="Remaining" value={activeSession ? formatTime(remaining) : "—"} />
         </div>
       </section>
 
@@ -73,20 +69,17 @@ export default function LiveSession() {
         </div>
 
         <div className="stp-live-controls">
-          <button className="stp-live-ctrl start" onClick={start} disabled={timerRunning || !activeSession}>
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-            Start
-          </button>
-          <button className="stp-live-ctrl pause" onClick={pause} disabled={!timerRunning}>
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
-            Pause
-          </button>
-          <button className="stp-live-ctrl reset" onClick={reset} disabled={!activeSession}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-              <path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/>
-            </svg>
-            Reset
-          </button>
+          {timerRunning ? (
+            <button className="stp-live-mainbtn pause" onClick={pause}>
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+              Pause Session
+            </button>
+          ) : (
+            <button className="stp-live-mainbtn start" onClick={start} disabled={!activeSession}>
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+              {studiedSecs > 0 ? "Resume Session" : "Start Session"}
+            </button>
+          )}
         </div>
       </div>
 
@@ -111,7 +104,12 @@ export default function LiveSession() {
 
 function ProgressRing({ percent, paused }) {
   const R = 130, C = 2 * Math.PI * R;
-  const offset = C - (Math.max(0, Math.min(100, percent)) / 100) * C;
+  const pct = Math.max(0, Math.min(100, percent));
+  const offset = C - (pct / 100) * C;
+  // Tip dot location: percent → angle around the ring
+  const angle = (pct / 100) * 2 * Math.PI - Math.PI / 2;
+  const tipX = 150 + R * Math.cos(angle);
+  const tipY = 150 + R * Math.sin(angle);
   return (
     <svg className={`stp-live-ring${paused ? " paused" : ""}`} viewBox="0 0 300 300">
       <circle className="track" cx="150" cy="150" r={R} fill="none" strokeWidth="14" />
@@ -120,6 +118,9 @@ function ProgressRing({ percent, paused }) {
         strokeDasharray={C} strokeDashoffset={offset}
         transform="rotate(-90 150 150)"
       />
+      {pct > 0 && pct < 100 && (
+        <circle className="tip" cx={tipX} cy={tipY} r="9" />
+      )}
     </svg>
   );
 }

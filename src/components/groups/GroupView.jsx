@@ -134,36 +134,32 @@ export default function GroupView({ group, user, showToast, onGroupUpdated, onLe
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden" }}>
       {deleting && <LoadingOverlay message="Deleting group…" />}
 
-      <div style={{ background: group.banner || "var(--accent)", padding: "14px 18px", flexShrink: 0 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <GroupAvatar group={group} size={60} />
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 19, color: "white", lineHeight: 1.2 }}>{group.name}</div>
-              {group.description && <div style={{ fontSize: 12, color: "rgba(255,255,255,.8)", marginTop: 3 }}>{group.description}</div>}
-              <div style={{ fontSize: 12, color: "rgba(255,255,255,.7)", marginTop: 5 }}>
-                {memberCount} member{memberCount !== 1 ? "s" : ""} &nbsp;·&nbsp; 🟢 {onlineUids.size} online
+      <div className="stp-gv-head" style={{ "--banner-bg": group.banner || "var(--accent)" }}>
+        <div className="stp-gv-row">
+          <div className="stp-gv-id">
+            <GroupAvatar group={group} size={56} />
+            <div style={{ minWidth:0 }}>
+              <div className="stp-gv-name">{group.name}</div>
+              {group.description && <div className="stp-gv-desc">{group.description}</div>}
+              <div className="stp-gv-meta">
+                {memberCount} member{memberCount !== 1 ? "s" : ""} · ● {onlineUids.size} online
               </div>
             </div>
           </div>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-            {(isAdmin || isCreator) && <TopBtn onClick={() => setAnnOpen(true)}>📢 Notify</TopBtn>}
-            <TopBtn onClick={handleShare}>🔗 Invite</TopBtn>
+          <div className="stp-gv-actions">
+            {(isAdmin || isCreator) && <button className="stp-gv-btn" onClick={() => setAnnOpen(true)}>📢 Notify</button>}
+            <button className="stp-gv-btn" onClick={handleShare}>🔗 Invite</button>
             {(isAdmin || isCreator) && (
-              <button onClick={openEdit} title="Edit Group"
-                style={{ background: "none", border: "none", cursor: "pointer", fontSize: 22, color: "white", padding: "4px 6px", lineHeight: 1 }}>
-                ✏️
-              </button>
+              <button className="stp-gv-btn icon" onClick={openEdit} title="Edit Group">✏️</button>
             )}
-            {!isCreator && <TopBtn onClick={handleLeave} danger>Leave</TopBtn>}
+            {!isCreator && <button className="stp-gv-btn danger" onClick={handleLeave}>Leave</button>}
           </div>
         </div>
       </div>
 
-      <div style={{ background: "var(--surface)", borderBottom: "2px solid var(--border)", display: "flex", padding: "0 16px", flexShrink: 0, overflowX: "auto" }}>
+      <div className="stp-gv-tabs">
         {TABS.map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            style={{ padding: "11px 16px", fontFamily: "inherit", fontSize: 13, fontWeight: 500, background: "none", border: "none", borderBottom: tab === t ? "3px solid var(--accent)" : "3px solid transparent", marginBottom: -2, color: tab === t ? "var(--accent)" : "var(--ink2)", cursor: "pointer", whiteSpace: "nowrap" }}>
+          <button key={t} onClick={() => setTab(t)} className={tab === t ? "on" : ""}>
             {TAB_LABELS[t]}
           </button>
         ))}
@@ -189,19 +185,24 @@ export default function GroupView({ group, user, showToast, onGroupUpdated, onLe
       )}
 
       {annOpen && (
-        <div onClick={e => e.target === e.currentTarget && setAnnOpen(false)}
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 400, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-          <div style={{ background: "var(--surface)", borderRadius: 14, padding: 24, width: "min(400px,92vw)", boxShadow: "0 20px 60px rgba(0,0,0,.2)" }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--ink)", marginBottom: 16 }}>📢 Send Announcement</h3>
-            <input value={annTitle} onChange={e => setAnnTitle(e.target.value)} placeholder="Title (required)"
-              style={{ width: "100%", padding: "9px 12px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 14, background: "var(--bg)", color: "var(--ink)", fontFamily: "inherit", boxSizing: "border-box" }} />
-            <textarea value={annMsg} onChange={e => setAnnMsg(e.target.value)} placeholder="Message (required)" rows={4}
-              style={{ width: "100%", padding: "9px 12px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 14, background: "var(--bg)", color: "var(--ink)", fontFamily: "inherit", boxSizing: "border-box", marginTop: 8, resize: "vertical" }} />
-            <div style={{ display: "flex", gap: 10, marginTop: 16, justifyContent: "flex-end" }}>
-              <button onClick={() => setAnnOpen(false)} style={{ background: "none", border: "1.5px solid var(--border)", borderRadius: 8, padding: "9px 18px", fontSize: 14, cursor: "pointer", color: "var(--ink)" }}>Cancel</button>
+        <div onClick={e => e.target === e.currentTarget && setAnnOpen(false)} className="stp-gs-modal-scrim">
+          <div className="stp-gs-modal">
+            <h3>📢 Send <em>announcement</em></h3>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--ink2)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 }}>Title</label>
+              <input value={annTitle} onChange={e => setAnnTitle(e.target.value)} placeholder="Title (required)"
+                style={{ width: "100%", padding: "9px 12px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 14, background: "var(--bg)", color: "var(--ink)", fontFamily: "inherit", boxSizing: "border-box" }} />
+            </div>
+            <div style={{ marginBottom: 6 }}>
+              <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--ink2)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 }}>Message</label>
+              <textarea value={annMsg} onChange={e => setAnnMsg(e.target.value)} placeholder="Message (required)" rows={4}
+                style={{ width: "100%", padding: "9px 12px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 14, background: "var(--bg)", color: "var(--ink)", fontFamily: "inherit", boxSizing: "border-box", resize: "vertical" }} />
+            </div>
+            <div style={{ display: "flex", gap: 10, marginTop: 20, justifyContent: "flex-end" }}>
+              <button onClick={() => setAnnOpen(false)} className="stp-gs-btn ghost" style={{ flex: "0 0 auto", minWidth: 90 }}>Cancel</button>
               <button onClick={handleAnnouncement} disabled={annBusy}
-                style={{ background: annBusy ? "var(--border)" : "var(--accent)", color: "white", border: "none", borderRadius: 8, padding: "9px 22px", fontSize: 14, fontWeight: 600, cursor: annBusy ? "not-allowed" : "pointer" }}>
-                {annBusy ? "Sending…" : "Send Announcement"}
+                className="stp-gs-btn primary" style={{ flex: "0 0 auto", minWidth: 130, opacity: annBusy ? .55 : 1 }}>
+                {annBusy ? "Sending…" : "Send"}
               </button>
             </div>
           </div>
@@ -217,11 +218,3 @@ function GroupAvatar({ group, size }) {
     : <div style={{ width: size, height: size, borderRadius: "50%", background: "rgba(255,255,255,.25)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.38, color: "white", fontWeight: 700, border: "2px solid rgba(255,255,255,.4)", flexShrink: 0 }}>{(group.name || "G").charAt(0).toUpperCase()}</div>;
 }
 
-function TopBtn({ onClick, children, danger }) {
-  return (
-    <button onClick={onClick}
-      style={{ background: danger ? "rgba(220,38,38,.85)" : "rgba(255,255,255,.2)", color: "white", border: "1px solid rgba(255,255,255,.35)", borderRadius: 6, padding: "6px 11px", fontSize: 12, fontWeight: 500, cursor: "pointer", whiteSpace: "nowrap" }}>
-      {children}
-    </button>
-  );
-}

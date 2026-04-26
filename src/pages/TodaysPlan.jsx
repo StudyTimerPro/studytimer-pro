@@ -155,6 +155,18 @@ export default function TodaysPlan() {
     return () => clearInterval(id);
   }, []);
 
+  // Plan-activation cutoff: don't mark a session "missed" if the slot's end
+  // already passed BEFORE the user started using this plan (e.g. switching plans
+  // at night when all slots have already ended).
+  const planActivatedAt = usePlanActivation(user?.uid, currentPlanId);
+  const isPastActivation = (endHHMM) => {
+    if (!planActivatedAt) return true;
+    const [h, m] = endHHMM.split(":").map(Number);
+    const d = new Date();
+    d.setHours(h, m, 0, 0);
+    return d.getTime() >= planActivatedAt;
+  };
+
   const getTimelineSessionState = (session) => {
     const sessDurSecs = duration(session.start, session.end) * 60;
     const studied = getSessionStudiedSecs(session.id);
@@ -164,7 +176,7 @@ export default function TodaysPlan() {
     const isLive = timerRunning && activeSession?.id === session.id;
     const isFull = !isLive && sessDurSecs > 0 && studied >= sessDurSecs;
     const isPartial = !isLive && studied > 0 && !isFull;
-    const isMissed = studiedLoaded && !isLive && studied <= 0 && toMin(session.end) <= nowMin;
+    const isMissed = studiedLoaded && !isLive && studied <= 0 && toMin(session.end) <= nowMin && isPastActivation(session.end);
     const isWindow = !isLive && pct === 0
       && toMin(session.start) <= nowMin && nowMin < toMin(session.end);
 
@@ -528,7 +540,7 @@ export default function TodaysPlan() {
                 const isLive    = timerRunning && activeSession?.id === s.id;
                 const isFull    = !isLive && sessDurSecs > 0 && studied >= sessDurSecs;
                 const isPartial = !isLive && studied > 0 && !isFull;
-                const isMissed  = studiedLoaded && !isLive && studied <= 0 && toMin(s.end) <= nowMin;
+                const isMissed  = studiedLoaded && !isLive && studied <= 0 && toMin(s.end) <= nowMin && isPastActivation(s.end);
                 const isWindow  = !isLive && pct === 0
                                && toMin(s.start) <= nowMin && nowMin < toMin(s.end);
 
@@ -813,6 +825,20 @@ function Stat({ label, value, unit }) {
       </div>
     </div>
   );
+}
+function usePlanActivation(uid, planId) {
+  const [ts, setTs] = useState(0);
+  useEffect(() => {
+    if (!uid || !planId || typeof window === "undefined") { setTs(0); return; }
+    const key = `stp:planActivated:${uid}:${planId}`;
+    let saved = Number(window.localStorage.getItem(key)) || 0;
+    if (!saved) {
+      saved = Date.now();
+      try { window.localStorage.setItem(key, String(saved)); } catch {}
+    }
+    setTs(saved);
+  }, [uid, planId]);
+  return ts;
 }
 function Field({ label, children }) {
   return (
