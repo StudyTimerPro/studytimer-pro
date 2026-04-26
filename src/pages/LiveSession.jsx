@@ -4,11 +4,14 @@ import useStore from "../store/useStore";
 
 export default function LiveSession() {
   const { timerSeconds, timerRunning, activeSession, start, pause, reset, formatTime } = useTimer();
-  const sessions = useStore((s) => s.sessions);
+  const sessions      = useStore((s) => s.sessions);
+  const sessionStudied = useStore((s) => s.sessionStudied);
 
   const totalSecs = activeSession ? duration(activeSession.start, activeSession.end) * 60 : 0;
-  const progress  = totalSecs > 0 ? Math.min((timerSeconds / totalSecs) * 100, 100) : 0;
-  const remaining = Math.max(totalSecs - timerSeconds, 0);
+  const savedForActive = activeSession ? Number(sessionStudied[activeSession.id] || 0) : 0;
+  const studiedSecs = savedForActive + (activeSession ? timerSeconds : 0);
+  const progress    = totalSecs > 0 ? Math.min((studiedSecs / totalSecs) * 100, 100) : 0;
+  const remaining   = Math.max(totalSecs - studiedSecs, 0);
 
   const statusKey = !activeSession ? "idle" : timerRunning ? "running" : "paused";
   const statusLbl = !activeSession ? "Idle" : timerRunning ? "Running" : "Paused";
@@ -25,9 +28,8 @@ export default function LiveSession() {
           </div>
         </div>
         <div className="stp-stats">
-          <Stat label="Elapsed"   value={formatTime(timerSeconds)} />
+          <Stat label="Studied"   value={formatTime(studiedSecs)} />
           <Stat label="Remaining" value={activeSession ? formatTime(remaining) : "—"} />
-          <Stat label="Progress"  value={activeSession ? Math.round(progress) : "—"} unit={activeSession ? "%" : null} />
         </div>
       </section>
 
@@ -47,7 +49,7 @@ export default function LiveSession() {
         <div className="stp-live-ring-wrap">
           <ProgressRing percent={progress} paused={!timerRunning && !!activeSession} />
           <div className="stp-live-ring-center">
-            <div className="stp-live-time">{formatTime(timerSeconds)}</div>
+            <div className="stp-live-time">{formatTime(studiedSecs)}</div>
             <div className="stp-live-pct">{activeSession ? `${Math.round(progress)}% complete` : "Ready"}</div>
           </div>
         </div>
@@ -55,22 +57,18 @@ export default function LiveSession() {
         <h2 className="stp-live-name">{activeSession ? activeSession.name : "No session selected"}</h2>
         <div className="stp-live-sub">
           {activeSession
-            ? `${formatTime(timerSeconds)} of ${formatTime(totalSecs)}`
+            ? `${formatTime(studiedSecs)} of ${formatTime(totalSecs)}`
             : "Start one from Today's Plan or below"}
         </div>
 
         <div className="stp-live-stats">
           <div className="cell">
-            <div className="l">Elapsed</div>
-            <div className="v">{formatTime(timerSeconds)}</div>
+            <div className="l">Studied</div>
+            <div className="v">{formatTime(studiedSecs)}</div>
           </div>
           <div className="cell">
             <div className="l">Remaining</div>
             <div className="v">{activeSession ? formatTime(remaining) : "—"}</div>
-          </div>
-          <div className="cell">
-            <div className="l">Total</div>
-            <div className="v">{activeSession ? formatTime(totalSecs) : "—"}</div>
           </div>
         </div>
 
@@ -95,7 +93,16 @@ export default function LiveSession() {
       {sessions.length > 0 && (
         <div className="stp-live-quick">
           <h3>Quick <em>start</em></h3>
-          {sessions.map(s => <QuickRow key={s.id} session={s} />)}
+          {sessions.map(s => (
+            <QuickRow
+              key={s.id}
+              session={s}
+              activeId={activeSession?.id}
+              activeRunning={timerRunning}
+              activeTimerSecs={timerSeconds}
+              savedSecs={Number(sessionStudied[s.id] || 0)}
+            />
+          ))}
         </div>
       )}
     </div>
@@ -117,16 +124,22 @@ function ProgressRing({ percent, paused }) {
   );
 }
 
-function QuickRow({ session: s }) {
-  const { startSession, activeSession, timerRunning } = useTimer();
-  const isActive = activeSession?.id === s.id;
-  const isLive   = isActive && timerRunning;
+function QuickRow({ session: s, activeId, activeRunning, activeTimerSecs, savedSecs }) {
+  const { startSession } = useTimer();
+  const isActive   = activeId === s.id;
+  const isLive     = isActive && activeRunning;             // light orange ONLY while running
+  const liveExtra  = isActive ? activeTimerSecs : 0;
+  const studiedSec = savedSecs + liveExtra;
+  const sessSec    = duration(s.start, s.end) * 60;
+  const pct        = sessSec > 0 ? Math.min(100, Math.round((studiedSec / sessSec) * 100)) : 0;
 
   return (
-    <div className={`stp-quick-row${isActive ? " active" : ""}`}>
+    <div className={`stp-quick-row${isLive ? " active" : ""}`}>
       <div className="info">
         <div className="name">{s.name}</div>
-        <div className="meta">{fmt12(s.start)} – {fmt12(s.end)}</div>
+        <div className="meta">{fmt12(s.start)} – {fmt12(s.end)} · {formatHM(studiedSec)} / {formatHM(sessSec)}</div>
+        <div className="stp-quick-progress"><div className="fill" style={{ width: `${pct}%` }} /></div>
+        <div className="pct">{pct}% studied</div>
       </div>
       <button className={`stp-live-ctrl ${isLive ? "pause" : "start"}`} onClick={() => startSession(s)}>
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
@@ -149,6 +162,7 @@ function Stat({ label, value, unit }) {
 }
 
 function duration(start, end) {
+  if (!start || !end) return 0;
   const [sh, sm] = start.split(":").map(Number);
   const [eh, em] = end.split(":").map(Number);
   return Math.max((eh * 60 + em) - (sh * 60 + sm), 0);
@@ -158,4 +172,11 @@ function fmt12(t) {
   let [h, m] = t.split(":").map(Number);
   const ap = h >= 12 ? "PM" : "AM"; h = h % 12 || 12;
   return `${h}:${String(m).padStart(2, "0")} ${ap}`;
+}
+function formatHM(secs) {
+  const total = Math.max(0, Math.floor(secs));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  if (h <= 0) return `${m}m`;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
 }

@@ -25,6 +25,7 @@ export default function WastageHistory({ activeSessions = [] }) {
   const { showToast, setWastageHistory } = useStore();
   const [history,  setHistory]  = useState({});
   const [selected, setSelected] = useState(null);
+  const [expanded, setExpanded] = useState(null);
 
   useEffect(() => {
     if (!user) return;
@@ -87,23 +88,41 @@ export default function WastageHistory({ activeSessions = [] }) {
       ) : (
         <div>
           {dayTotals.map(d => {
-            const pct = (d.mins / maxMins) * 100;
-            const isSel = selected === d.date;
+            const pct  = (d.mins / maxMins) * 100;
+            const isSel  = selected === d.date;
+            const isOpen = expanded === d.date;
+            const sessions = Object.values(history[d.date] || {});
             return (
-              <div
-                key={d.date}
-                className="stp-bar-row"
-                onClick={() => setSelected(isSel ? null : d.date)}
+              <div key={d.date} className={`stp-bar-row expandable${isOpen ? " open" : ""}`}
                 style={{ cursor:"pointer", paddingLeft:8, paddingRight:8, borderRadius:8, background: isSel ? "var(--accent-bg)" : "transparent" }}
-              >
+                onClick={() => {
+                  setExpanded(isOpen ? null : d.date);
+                  setSelected(d.date);
+                }}>
+                <div className="chev">▶</div>
                 <div className="stp-bar-date">{fmtDate(d.date)}</div>
                 <div className="stp-bar-track">
                   <div className="stp-bar-fill" style={{ width: `${pct}%` }} />
                 </div>
                 <div className="stp-bar-val">{toHM(d.mins)}</div>
-                <div style={{ width:78, textAlign:"right", fontSize:10, color:"var(--ink3)", fontFamily:"var(--mono)", letterSpacing:".06em", textTransform:"uppercase" }}>
+                <div style={{ width:64, textAlign:"right", fontSize:10, color:"var(--ink3)", fontFamily:"var(--mono)", letterSpacing:".06em", textTransform:"uppercase", flexShrink:0 }}>
                   {d.missed}m · {d.partial}p
                 </div>
+                {isOpen && (
+                  <div className="stp-bar-detail" onClick={e => e.stopPropagation()}>
+                    {sessions.length === 0 ? (
+                      <div style={{ fontSize:12, color:"var(--ink2)", textAlign:"center", padding:6 }}>No data.</div>
+                    ) : sessions
+                        .slice()
+                        .sort((a, b) => (b.duration || 0) - (a.duration || 0))
+                        .map((s, i) => (
+                          <div key={i} className="item">
+                            <span className="nm">{s.sessionName || s.subject || "Untitled"}</span>
+                            <span className={`du ${s.missed ? "miss" : "part"}`}>{toHM(s.duration || 0)}</span>
+                          </div>
+                        ))}
+                  </div>
+                )}
               </div>
             );
           })}

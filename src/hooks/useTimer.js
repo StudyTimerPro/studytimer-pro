@@ -97,18 +97,10 @@ export function useTimer() {
 
   const start = () => setTimerRunning(true);
 
-  // Pause: flush elapsed seconds into sessionStudied BEFORE stopping the ticker.
-  // This triggers the TodaysPlan save effect so progress persists through refresh.
-  // timerSeconds resets to 0 — on resume, the counting starts fresh and adds
-  // to the already-flushed amount via getSessionStudiedSecs.
-  const pause = () => {
-    const { activeSession: sess, timerSeconds: elapsed, setTimerSeconds } = useStore.getState();
-    if (sess?.id && elapsed > 0) {
-      flushSessionTime(sess.id, elapsed);
-      setTimerSeconds(0);
-    }
-    setTimerRunning(false);
-  };
+  // Pause: just stop the ticker. timerSeconds keeps its value so the visible
+  // timer shows where it paused, and resume continues counting from there.
+  // Persistence relies on beforeunload + session-switch flush.
+  const pause = () => setTimerRunning(false);
 
   const reset = () => {
     persistElapsedSession(useStore.getState());

@@ -382,7 +382,6 @@ function WastageCard({ s, selected, onSelect }) {
         </div>
       </div>
       <div className="right">
-        <StatusBadge missed={s.missed} />
         <span style={{ fontSize:11, color:"var(--ink2)", fontFamily:"var(--mono)" }}>{wastePct}% wasted</span>
       </div>
     </div>
