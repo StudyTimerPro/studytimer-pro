@@ -53,8 +53,9 @@ export default function Layout({ children }) {
 
 function ActiveBanner() {
   const activeSession = useStore((s) => s.activeSession);
+  const timerRunning  = useStore((s) => s.timerRunning);
   const timerSeconds  = useStore((s) => s.timerSeconds);
-  if (!activeSession) return null;
+  if (!activeSession || !timerRunning) return null;
 
   const m = String(Math.floor(timerSeconds / 60)).padStart(2, "0");
   const s = String(timerSeconds % 60).padStart(2, "0");

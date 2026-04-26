@@ -272,12 +272,12 @@ export default function WastageReport() {
                 <h3>Today's <em>breakdown</em></h3>
                 <span className="badge">{toHM(totalStudied + totalWastage)} elapsed</span>
               </div>
-              <BreakdownDonut studied={totalStudied} wasted={totalWastage} missed={missedCount} partial={partialCount} />
+              <BreakdownDonut studied={totalStudied} wasted={totalWastage} />
             </div>
 
             <div className="stp-panel">
               <div className="stp-panel-head">
-                <h3>Wasted <em>sessions</em></h3>
+                <h3>Today wasted <em>sessions</em></h3>
                 {selectedId && (
                   <button className="stp-btn" onClick={handleRemoveSelected}
                     style={{ fontSize:12, padding:"6px 12px", borderRadius:8, border:"1px solid var(--border)", background:"var(--surface)", color:"var(--ink)", cursor:"pointer" }}>
@@ -309,7 +309,7 @@ export default function WastageReport() {
 }
 
 // ─── Donut breakdown ─────────────────────────────────────────────────────────
-function BreakdownDonut({ studied, wasted, missed, partial }) {
+function BreakdownDonut({ studied, wasted }) {
   const total = Math.max(studied + wasted, 1);
   const studiedPct = (studied / total) * 100;
   const wastedPct  = (wasted  / total) * 100;
@@ -348,14 +348,6 @@ function BreakdownDonut({ studied, wasted, missed, partial }) {
           <span className="lbl"><span className="sw" style={{ background:"#E57373" }} /> Wasted</span>
           <span className="v">{toHM(wasted)}</span>
         </div>
-        <div className="stp-legend-row">
-          <span className="lbl"><span className="sw" style={{ background:"#E4A62A" }} /> Partial</span>
-          <span className="v">{partial}</span>
-        </div>
-        <div className="stp-legend-row">
-          <span className="lbl"><span className="sw" style={{ background:"#C62828" }} /> Missed</span>
-          <span className="v">{missed}</span>
-        </div>
       </div>
     </div>
   );
@@ -370,8 +362,8 @@ function WastageCard({ s, selected, onSelect }) {
         <div className="name">{s.name}</div>
         <div className="meta">
           <span>{fmt12(s.start)}–{fmt12(s.end)}</span>
-          <span>Studied <b className="studied">{toHHMMSS(s.studiedMins)}</b></span>
-          <span>Wasted <b className="wasted">{toHHMMSS(s.wastageMins)}</b></span>
+          <span>Studied <b className="studied">{toHM(s.studiedMins)}</b></span>
+          <span>Wasted <b className="wasted">{toHM(s.wastageMins)}</b></span>
         </div>
         <div style={{ marginTop:8, height:6, background:"var(--chip)", borderRadius:999, overflow:"hidden" }}>
           <div style={{
