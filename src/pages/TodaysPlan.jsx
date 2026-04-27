@@ -12,6 +12,7 @@ import {
 import AIPlanModal from "../components/plan/AIPlanModal";
 import AddExamModal from "../components/plan/AddExamModal";
 import ExamPlanSelector from "../components/plan/ExamPlanSelector";
+import SessionMaterialSheet from "../components/plan/SessionMaterialSheet";
 import { LoadingOverlay } from "../components/common/LoadingAnimation";
 
 /*
@@ -42,6 +43,12 @@ export default function TodaysPlan() {
   } = useStore();
   const isFlex = currentPlanMode === "flexible";
   const [showModeSwitch, setShowModeSwitch] = useState(false);
+  const [materialSession, setMaterialSession] = useState(null);
+  const [materialQuickType, setMaterialQuickType] = useState(null);
+  function openMaterial(s, quickType = null) {
+    setMaterialSession(s);
+    setMaterialQuickType(quickType);
+  }
 
   const [studiedLoaded, setStudiedLoaded] = useState(false);
   const isMobile = useIsMobile();
@@ -591,6 +598,7 @@ export default function TodaysPlan() {
               onPause={pause}
               onEdit={openEdit}
               onDelete={handleDelete}
+              onMaterial={openMaterial}
               formatTime={formatTime}
             />
           )
@@ -723,6 +731,10 @@ export default function TodaysPlan() {
                             </span>
                             {s.breakMins > 0 && <span style={{ color:"var(--ink3)" }}>· {s.breakMins}m break after</span>}
                           </div>
+                          <div className="stp-quick-chip-row" style={{ marginTop: 8 }}>
+                            <button className="stp-quick-chip sm" onClick={() => openMaterial(s, "notes")}>📝 Quick notes</button>
+                            <button className="stp-quick-chip sm" onClick={() => openMaterial(s, "mcq")}>❓ 5 MCQs</button>
+                          </div>
                         </div>
                         <div className="stp-actions">
                           {isLive ? (
@@ -739,6 +751,9 @@ export default function TodaysPlan() {
                           )}
                           <button className="stp-act" title="Edit" onClick={() => openEdit(s)}>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                          </button>
+                          <button className="stp-act" title="Material" onClick={() => openMaterial(s)}>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
                           </button>
                           <button className="stp-act danger" title="Delete" onClick={() => handleDelete(s.id)}>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>
@@ -794,6 +809,9 @@ export default function TodaysPlan() {
                         <button className="stp-act" onClick={() => openEdit(s)}>
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                         </button>
+                        <button className="stp-act" title="Material" onClick={() => openMaterial(s)}>
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                        </button>
                         <button className="stp-act danger" onClick={() => handleDelete(s.id)}>
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M10 11v6M14 11v6"/></svg>
                         </button>
@@ -828,6 +846,19 @@ export default function TodaysPlan() {
             setCurrentExamName(name);
             setShowAddExam(false);
           }}
+        />
+      )}
+
+      {/* SESSION MATERIAL BOTTOM SHEET */}
+      {materialSession && (
+        <SessionMaterialSheet
+          user={user}
+          examId={currentExamId}
+          planId={currentPlanId}
+          session={materialSession}
+          showToast={showToast}
+          initialQuickType={materialQuickType}
+          onClose={() => { setMaterialSession(null); setMaterialQuickType(null); }}
         />
       )}
 
@@ -1028,7 +1059,7 @@ function fmtMin(m) { if (m < 60) return `${m}m`; const h = Math.floor(m/60), mm 
 /* ---------- Flex-mode ordered session list ---------- */
 function FlexSessionList({
   sessions, activeSession, timerSeconds, timerRunning, sessionStudied,
-  onStart, onPause, onEdit, onDelete, formatTime,
+  onStart, onPause, onEdit, onDelete, onMaterial, formatTime,
 }) {
   // Pre-compute studied seconds + "any later started" flag for skip detection.
   const rows = [];
@@ -1094,6 +1125,10 @@ function FlexSessionList({
                   transition: "width .4s",
                 }} />
               </div>
+              <div className="stp-quick-chip-row" style={{ marginTop: 8 }}>
+                <button className="stp-quick-chip sm" onClick={() => onMaterial?.(r.s, "notes")}>📝 Quick notes</button>
+                <button className="stp-quick-chip sm" onClick={() => onMaterial?.(r.s, "mcq")}>❓ 5 MCQs</button>
+              </div>
             </div>
             <div className="stp-actions">
               {isLive ? (
@@ -1111,6 +1146,9 @@ function FlexSessionList({
               )}
               <button className="stp-act" title="Edit" onClick={() => onEdit(r.s)}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              </button>
+              <button className="stp-act" title="Material" onClick={() => onMaterial?.(r.s)}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
               </button>
               <button className="stp-act danger" title="Delete" onClick={() => onDelete(r.s.id)}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>

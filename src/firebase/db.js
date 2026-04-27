@@ -134,6 +134,37 @@ export function deletePlanSession(uid, examId, planId, sessionId) {
   return remove(ref(db, `exams/${uid}/${examId}/plans/${planId}/sessions/${sessionId}`));
 }
 
+// ── Session materials (AI-generated study content) ─────────────────
+// Path: exams/{uid}/{examId}/plans/{planId}/sessions/{sessionId}/materials/{materialId}
+function materialsPath(uid, examId, planId, sessionId) {
+  return `exams/${uid}/${examId}/plans/${planId}/sessions/${sessionId}/materials`;
+}
+
+export function saveSessionMaterial(uid, examId, planId, sessionId, material) {
+  return push(ref(db, materialsPath(uid, examId, planId, sessionId)), {
+    type: material.type,
+    content: material.content || "",
+    meta: material.meta || null,
+    createdAt: Date.now(),
+  });
+}
+
+export function listenSessionMaterials(uid, examId, planId, sessionId, callback) {
+  const r = ref(db, materialsPath(uid, examId, planId, sessionId));
+  const cb = snap => {
+    const data = snap.val() || {};
+    const list = Object.entries(data).map(([id, v]) => ({ id, ...v }));
+    list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    callback(list);
+  };
+  onValue(r, cb);
+  return () => off(r, "value", cb);
+}
+
+export function deleteSessionMaterial(uid, examId, planId, sessionId, materialId) {
+  return remove(ref(db, `${materialsPath(uid, examId, planId, sessionId)}/${materialId}`));
+}
+
 // ── Export / Import ────────────────────────────────────────────────
 export async function exportExam(uid, examId) {
   const snap = await get(ref(db, `exams/${uid}/${examId}`));
