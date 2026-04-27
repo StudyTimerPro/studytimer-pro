@@ -220,6 +220,24 @@ export function listenAllDayProgress(uid, examId, planId, sessionId, callback) {
   return () => off(r, "value", cb);
 }
 
+// ── Calendar-date → study-day-number map (per session) ─────────────
+// Path: exams/{uid}/{examId}/plans/{planId}/sessions/{sessionId}/dayMap/{YYYY-MM-DD} = N
+function dayMapPath(uid, examId, planId, sessionId) {
+  return `exams/${uid}/${examId}/plans/${planId}/sessions/${sessionId}/dayMap`;
+}
+export function saveDayMap(uid, examId, planId, sessionId, dateKey, dayNumber) {
+  return set(
+    ref(db, `${dayMapPath(uid, examId, planId, sessionId)}/${dateKey}`),
+    Number(dayNumber)
+  );
+}
+export function listenDayMap(uid, examId, planId, sessionId, callback) {
+  const r = ref(db, dayMapPath(uid, examId, planId, sessionId));
+  const cb = snap => callback(snap.val() || {});
+  onValue(r, cb);
+  return () => off(r, "value", cb);
+}
+
 // ── Export / Import ────────────────────────────────────────────────
 export async function exportExam(uid, examId) {
   const snap = await get(ref(db, `exams/${uid}/${examId}`));

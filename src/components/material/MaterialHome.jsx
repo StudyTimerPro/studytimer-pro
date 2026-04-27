@@ -57,7 +57,7 @@ export default function MaterialHome({
         : buildSimplePrompt({ type: t, topic: tp, difficulty: d, length: len, examName });
       const text = await callAI(
         [
-          { role: "system", content: "You are a concise, exam-focused study assistant. Write plain prose with light bullets. Do not use # headings, ** bold markers, or --- separators." },
+          { role: "system", content: "You are a concise, exam-focused study assistant. Write plain prose with light bullets. Do not use # headings or --- separators. You MAY use **bold** to highlight key terms, MCQ stems, answer letters, and important facts." },
           { role: "user", content: userMsg },
         ],
         "gpt-4o-mini", 0.5

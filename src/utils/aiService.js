@@ -1,7 +1,23 @@
 const AI_FUNCTION_URL = "https://aichat-zdg7ljsrha-uc.a.run.app";
 
+import useStore from "../store/useStore";
+import {
+  estimateMessageTokens, estimateTokens,
+  recordUsage, assertHasBalance,
+} from "./tokenTracker";
+
 // ─── Basic call helpers ─────────────────────────────────────────────────────
 export async function callAI(messages, model = "gpt-4o-mini", temperature = 0.7) {
+  const uid = useStore.getState().user?.uid || null;
+  // Block the call if the user has hit their token limit
+  if (uid) {
+    try { await assertHasBalance(uid); }
+    catch (e) {
+      useStore.getState().showToast?.(e.message || "Token limit reached");
+      throw e;
+    }
+  }
+
   const res = await fetch(AI_FUNCTION_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -12,10 +28,30 @@ export async function callAI(messages, model = "gpt-4o-mini", temperature = 0.7)
     throw new Error(err.error || err.message || `AI error ${res.status}`);
   }
   const data = await res.json();
-  return data.text ?? data.choices?.[0]?.message?.content ?? data.content ?? "";
+  const text = data.text ?? data.choices?.[0]?.message?.content ?? data.content ?? "";
+
+  // Prefer cloud-returned usage; fall back to estimation.
+  const usage = data.usage || data.choices?.[0]?.usage || null;
+  const promptTokens     = Number(usage?.prompt_tokens)     || estimateMessageTokens(messages);
+  const completionTokens = Number(usage?.completion_tokens) || estimateTokens(text);
+
+  if (uid) {
+    recordUsage(uid, { model, promptTokens, completionTokens }).catch(() => {});
+  }
+
+  return text;
 }
 
 export async function callAIStream(messages, model = "gpt-4o-mini", onChunk, onDone) {
+  const uid = useStore.getState().user?.uid || null;
+  if (uid) {
+    try { await assertHasBalance(uid); }
+    catch (e) {
+      useStore.getState().showToast?.(e.message || "Token limit reached");
+      throw e;
+    }
+  }
+
   const res = await fetch(AI_FUNCTION_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -28,6 +64,7 @@ export async function callAIStream(messages, model = "gpt-4o-mini", onChunk, onD
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let collected = "";
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -41,11 +78,28 @@ export async function callAIStream(messages, model = "gpt-4o-mini", onChunk, onD
       if (!payload) continue;
       try {
         const parsed = JSON.parse(payload);
-        if (parsed.done) { onDone?.(); return; }
+        if (parsed.done) {
+          if (uid) {
+            recordUsage(uid, {
+              model,
+              promptTokens: estimateMessageTokens(messages),
+              completionTokens: estimateTokens(collected),
+            }).catch(() => {});
+          }
+          onDone?.();
+          return;
+        }
         const content = parsed.content ?? "";
-        if (content) onChunk?.(content);
+        if (content) { collected += content; onChunk?.(content); }
       } catch { /* skip */ }
     }
+  }
+  if (uid) {
+    recordUsage(uid, {
+      model,
+      promptTokens: estimateMessageTokens(messages),
+      completionTokens: estimateTokens(collected),
+    }).catch(() => {});
   }
   onDone?.();
 }

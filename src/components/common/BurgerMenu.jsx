@@ -4,6 +4,7 @@ import { exportPDF } from "../../utils/exportPDF";
 import { saveUserSettings } from "../../firebase/db";
 import SettingsModal from "./SettingsModal";
 import HelpModal from "./HelpModal";
+import TokensModal from "./TokensModal";
 
 /* Redesigned burger → account menu. Same public props as before. */
 
@@ -11,6 +12,7 @@ export default function BurgerMenu({ user, onLogout, onSwitchAccount }) {
   const [open, setOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [showTokens, setShowTokens] = useState(false);
   const menuRef = useRef(null);
 
   /*
@@ -44,6 +46,7 @@ export default function BurgerMenu({ user, onLogout, onSwitchAccount }) {
 
   function handleSettings()    { setOpen(false); setShowSettings(true); }
   function handleHelp()        { setOpen(false); setShowHelp(true); }
+  function handleTokens()      { setOpen(false); setShowTokens(true); }
   function handleSwitch()      { setOpen(false); onSwitchAccount && onSwitchAccount(); }
   function handleLogoutClick() { setOpen(false); onLogout && onLogout(); }
 
@@ -93,6 +96,14 @@ export default function BurgerMenu({ user, onLogout, onSwitchAccount }) {
 
             <div className="stp-menu-sep" />
 
+            <button className="stp-menu-item" onClick={handleTokens}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <circle cx="12" cy="12" r="9"/>
+                <path d="M9 12h6M12 9v6"/>
+              </svg>
+              AI Tokens
+            </button>
+
             <button className="stp-menu-item" onClick={handleSettings}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                 <circle cx="12" cy="12" r="3"/>
@@ -130,6 +141,7 @@ export default function BurgerMenu({ user, onLogout, onSwitchAccount }) {
 
       {showSettings && user && <SettingsModal user={user} onClose={() => setShowSettings(false)} />}
       {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
+      {showTokens && user && <TokensModal user={user} onClose={() => setShowTokens(false)} />}
     </>
   );
 }

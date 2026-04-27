@@ -2,6 +2,9 @@ import React, { useEffect, useState } from "react";
 import MaterialHome from "../components/material/MaterialHome";
 import TopicHierarchyView from "../components/material/TopicHierarchyView";
 import MaterialHistory from "../components/material/MaterialHistory";
+import useStore from "../store/useStore";
+import { useTimer, flushSessionTime } from "../hooks/useTimer";
+import TokenLabel from "../components/material/TokenLabel";
 
 /*
  * Full-page Session Material section.
@@ -40,6 +43,7 @@ export default function SessionMaterial({
   showToast, onClose, initialQuickType,
 }) {
   const [tab, setTab] = useState("home");
+  const { startSession, pause } = useTimer();
 
   // Lock body scroll while open
   useEffect(() => {
@@ -47,6 +51,28 @@ export default function SessionMaterial({
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = prev; };
   }, []);
+
+  // Auto-start the session timer the moment this material page mounts;
+  // pause + flush on unmount so studied seconds aren't lost.
+  useEffect(() => {
+    if (!session?.id) return;
+    const state = useStore.getState();
+    const current = state.activeSession;
+    if (current?.id === session.id) {
+      // Same session — just resume if paused
+      if (!state.timerRunning) state.setTimerRunning(true);
+    } else {
+      startSession(session);
+    }
+    return () => {
+      const s = useStore.getState();
+      if (s.activeSession?.id === session.id) {
+        flushSessionTime(session.id, s.timerSeconds);
+      }
+      pause();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.id]);
 
   // Esc closes
   useEffect(() => {
@@ -59,6 +85,8 @@ export default function SessionMaterial({
 
   return (
     <div className="stp-mat-page">
+      <StudyIndicatorStrip />
+
       <div className="stp-mat-topbar">
         <button className="stp-mat-back" onClick={onClose} aria-label="Close material">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -75,6 +103,7 @@ export default function SessionMaterial({
             <span className="stp-mat-chip">⏱ {durationLabel(session)}</span>
             <span className="stp-mat-chip">⚡ {prettyPri(session.priority)} priority</span>
             {examName && <span className="stp-mat-chip">🎓 {examName}</span>}
+            <TokenLabel user={user} />
           </div>
         </div>
       </div>
@@ -125,6 +154,24 @@ export default function SessionMaterial({
           />
         )}
       </main>
+    </div>
+  );
+}
+
+function StudyIndicatorStrip() {
+  const activeSession = useStore(s => s.activeSession);
+  const timerRunning  = useStore(s => s.timerRunning);
+  const timerSeconds  = useStore(s => s.timerSeconds);
+  if (!activeSession || !timerRunning) return null;
+  const h = Math.floor(timerSeconds / 3600);
+  const m = String(Math.floor((timerSeconds % 3600) / 60)).padStart(2, "0");
+  const s = String(timerSeconds % 60).padStart(2, "0");
+  const stamp = h > 0 ? `${String(h).padStart(2, "0")}:${m}:${s}` : `${m}:${s}`;
+  return (
+    <div className="stp-mat-study-strip">
+      <span className="dot" />
+      <span className="lbl">Now studying · <em>{activeSession.name}</em></span>
+      <span className="stamp">{stamp}</span>
     </div>
   );
 }

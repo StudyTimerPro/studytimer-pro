@@ -42,7 +42,38 @@ export default function MaterialContent({ text, empty = "Nothing here yet." }) {
           );
         }
         if (b.kind === "divider") {
+          if (b.variant === "more") {
+            return (
+              <div key={i} className="stp-mat-divider more">
+                <span className="lbl">More notes</span>
+              </div>
+            );
+          }
           return <div key={i} className="stp-mat-divider" />;
+        }
+        if (b.kind === "mcq-q") {
+          return (
+            <div key={i} className="stp-mcq-q">
+              <span className="num">Q{b.num}.</span>
+              <span className="text"><Inline tokens={b.inline} /></span>
+            </div>
+          );
+        }
+        if (b.kind === "mcq-opt") {
+          return (
+            <div key={i} className="stp-mcq-opt">
+              <span className="letter">{b.letter}.</span>
+              <span className="text"><Inline tokens={b.inline} /></span>
+            </div>
+          );
+        }
+        if (b.kind === "kv") {
+          return (
+            <div key={i} className="stp-mat-kv">
+              <span className="lbl">{b.label}:</span>
+              <span className="val"><Inline tokens={b.inline} /></span>
+            </div>
+          );
         }
         return null;
       })}

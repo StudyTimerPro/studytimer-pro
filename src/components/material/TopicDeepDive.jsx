@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { callAI } from "../../utils/aiService";
 import { CAPSULES, buildCapsulePrompt, topicSlug } from "../../utils/materialPrompts";
 import { saveCapsule, listenCapsules } from "../../firebase/db";
@@ -19,9 +19,12 @@ export default function TopicDeepDive({
   user, examId, planId, session, examName, topic, onBack, showToast,
 }) {
   const slug = topicSlug(topic.subtopic_name || topic.topic || "topic");
-  const [active, setActive] = useState("objectives");
+  const [active, setActive] = useState("important_notes");
   const [cache, setCache] = useState({});      // server-cached capsules
   const [busy, setBusy] = useState({});        // { capsuleId: bool }
+  const [showLoadMore, setShowLoadMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const contentRef = useRef(null);
 
   // Subscribe to cached capsule content
   useEffect(() => {
@@ -39,11 +42,32 @@ export default function TopicDeepDive({
     // eslint-disable-next-line
   }, [active, cache]);
 
-  async function loadCapsule(capsuleId) {
+  // Scroll-bottom detection for "Load more" on important_notes
+  useEffect(() => {
+    setShowLoadMore(false);
+    if (active !== "important_notes") return;
+    const el = contentRef.current;
+    if (!el) return;
+    function onScroll() {
+      const fromBottom = el.scrollHeight - (el.scrollTop + el.clientHeight);
+      setShowLoadMore(fromBottom <= 24);
+    }
+    onScroll();
+    el.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      window.removeEventListener("scroll", onScroll);
+    };
+  }, [active, cache]);
+
+  async function loadCapsule(capsuleId, opts = {}) {
     setBusy(b => ({ ...b, [capsuleId]: true }));
     try {
+      // For "load more" we generate with the *_more variant prompt and append.
+      const promptId = opts.more ? `${capsuleId}_more` : capsuleId;
       const prompt = buildCapsulePrompt({
-        capsuleId,
+        capsuleId: promptId,
         topicName: topic.subtopic_name || topic.topic,
         sessionName: session?.name || "",
         examName: examName || "",
@@ -54,12 +78,16 @@ export default function TopicDeepDive({
       });
       const text = await callAI(
         [
-          { role: "system", content: "Exam-focused study assistant. Plain prose with light bullets. Do not use # headings, ** bold markers, or --- separators." },
+          { role: "system", content: "Exam-focused study assistant. Plain prose with light bullets. Do not use # headings or --- separators. You MAY use **bold** to highlight key terms and facts." },
           { role: "user", content: prompt },
         ],
         "gpt-4o-mini", 0.5
       );
-      await saveCapsule(user.uid, examId, planId, session.id, slug, capsuleId, text || "");
+      const existing = cache[capsuleId]?.content || "";
+      const merged = opts.more && existing
+        ? `${existing}\n\n--more--\n\n${text || ""}`
+        : (text || "");
+      await saveCapsule(user.uid, examId, planId, session.id, slug, capsuleId, merged);
     } catch (err) {
       showToast?.("Capsule failed: " + (err.message || err));
     } finally {
@@ -70,6 +98,16 @@ export default function TopicDeepDive({
   async function regenerate() {
     if (!confirm("Regenerate this capsule?")) return;
     await loadCapsule(active);
+  }
+
+  async function handleLoadMore() {
+    if (loadingMore) return;
+    setLoadingMore(true);
+    try {
+      await loadCapsule("important_notes", { more: true });
+    } finally {
+      setLoadingMore(false);
+    }
   }
 
   const activeContent = cache[active]?.content || "";
@@ -121,11 +159,22 @@ export default function TopicDeepDive({
             </button>
           )}
         </div>
-        <div className="stp-mat-output">
+        <div className="stp-mat-output" ref={contentRef}>
           {isBusy && !activeContent ? (
             <div className="stp-mat-empty">Working on it…</div>
           ) : (
             <MaterialContent text={activeContent} empty="Select a tab to load content." />
+          )}
+          {active === "important_notes" && activeContent && showLoadMore && (
+            <div className="stp-loadmore-row">
+              <button
+                className="stp-btn small primary"
+                onClick={handleLoadMore}
+                disabled={loadingMore}
+              >
+                {loadingMore ? "Loading more notes…" : "↓ Load more notes"}
+              </button>
+            </div>
           )}
         </div>
       </div>

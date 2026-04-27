@@ -44,7 +44,7 @@ export function parseInline(line) {
   return out.filter(t => t.text && t.text.length);
 }
 
-// Block kinds: heading (level 1..3), para, ul, ol, divider
+// Block kinds: heading (level 1..3), para, ul, ol, divider, mcq-q, mcq-opt, kv
 export function parseMarkdown(raw) {
   if (!raw) return [];
   const lines = String(raw).replace(/\r\n?/g, "\n").split("\n");
@@ -66,11 +66,21 @@ export function parseMarkdown(raw) {
   };
   const flushAll = () => { flushPara(); flushList(); };
 
+  // Labels rendered with bold prefix on the same line (Answer: X, Why: X …)
+  const KV_LABEL_RE = /^(Answer|Ans|Correct\s*answer|Why|Explanation|Reason|Solution|Hint|Note|Tip|Trap|Shortcut|Common\s*mistake|Quick\s*check|Solving\s*time|Priority|When\s*asked|Marks?|Difficulty|Format)\s*[:\-–]\s*(.+)$/i;
+
   for (let raw of lines) {
     const line = raw.replace(/\t/g, "  ");
     const stripped = line.trim();
 
     if (!stripped) { flushAll(); continue; }
+
+    // Marker for "load-more" boundary inserted between batches
+    if (stripped === "--more--") {
+      flushAll();
+      blocks.push({ kind: "divider", variant: "more" });
+      continue;
+    }
 
     // Divider: ---, ***, ===, or strings of dashes / equals
     if (/^[-=*_]{3,}$/.test(stripped)) {
@@ -86,6 +96,44 @@ export function parseMarkdown(raw) {
       const level = Math.min(hMatch[1].length, 3);
       const text = stripBoldMarkers(hMatch[2]).replace(/[:\s]+$/, "");
       blocks.push({ kind: "heading", level, inline: parseInline(text) });
+      continue;
+    }
+
+    // MCQ question: "Q1.", "Q1)", "Question 1:"
+    const qMatch = stripped.match(/^(?:Q\.?\s*(\d+)|Question\s+(\d+))[.)\s:-]+\s*(.+)$/i);
+    if (qMatch) {
+      flushAll();
+      const num = qMatch[1] || qMatch[2];
+      blocks.push({
+        kind: "mcq-q",
+        num: String(num),
+        inline: parseInline(stripBoldMarkers(qMatch[3])),
+      });
+      continue;
+    }
+
+    // MCQ option: "A)", "A.", "(A)" followed by text
+    const optMatch = stripped.match(/^[(\[]?([A-Da-d])[)\].]\s+(.+)$/);
+    if (optMatch) {
+      flushPara();
+      flushList();
+      blocks.push({
+        kind: "mcq-opt",
+        letter: optMatch[1].toUpperCase(),
+        inline: parseInline(optMatch[2]),
+      });
+      continue;
+    }
+
+    // Inline label rows: "Answer: B", "Why: …", "Hint: …", etc.
+    const kvMatch = stripped.match(KV_LABEL_RE);
+    if (kvMatch) {
+      flushAll();
+      blocks.push({
+        kind: "kv",
+        label: kvMatch[1],
+        inline: parseInline(kvMatch[2]),
+      });
       continue;
     }
 

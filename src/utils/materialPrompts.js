@@ -5,6 +5,7 @@
 // Plus simple prompts for Notes / MCQs / Summary / Upload-content.
 
 export const CAPSULES = [
+  { id: "important_notes", emoji: "⭐", title: "Important Notes" },
   { id: "objectives", emoji: "🎯", title: "Scoring Objectives" },
   { id: "concepts",   emoji: "📖", title: "Core Concepts" },
   { id: "formulas",   emoji: "📐", title: "Key Formulas" },
@@ -115,6 +116,48 @@ Requirements:
 `;
 
   switch (capsuleId) {
+    case "important_notes":
+      return ctx + `
+IMPORTANT NOTES — actual study content (NOT tips, NOT strategy, NOT guidance).
+
+Generate the SUBSTANTIVE notes a learner needs for this topic, prioritized by what's
+been frequently asked in the last ~5 years of ${examName || "this exam"} pattern and
+what is broadly considered most important.
+
+Sections (use these exact section headings):
+1. High-priority facts & definitions — the must-know factual content. Each item: the fact, then a short clarifying line. Mark each with priority (HIGH / IMPORTANT / FREQUENT).
+2. Frequently-asked concepts — concepts that appear in PYP patterns repeatedly. For each: concept name, 2-4 line explanation, why it matters in this exam.
+3. Key data / numbers / years / articles — exact figures, dates, article numbers, formulas, constants etc. that are commonly tested. Bullet list, dense.
+4. Must-remember terminology — domain-specific terms with crisp 1-line definitions.
+5. Common confusions & distinctions — pairs/triplets of things students mix up + how to tell them apart.
+6. PYP-style highlight points — points that have shown up in question patterns frequently. Phrase each as a teachable nugget, NOT as a question.
+
+Rules:
+- This is CONTENT, not advice. No "focus on", "remember to", "be sure to" sentences.
+- Use HONEST language: "frequently asked", "commonly tested" — never invent specific years.
+- Bold the key term/fact at the start of each bullet so it scans cleanly.
+- Aim for substantial depth (this is the primary study source).`;
+
+    case "important_notes_more":
+      return ctx + `
+IMPORTANT NOTES — CONTINUATION.
+
+The learner has already read the first batch of important notes for this topic and
+asked to load MORE. Generate ADDITIONAL substantive notes that go DEEPER and BROADER
+than typical first-pass notes. DO NOT repeat what would obviously be in the first batch.
+
+Sections:
+1. Advanced / less-obvious facts — second-tier content that still appears in tougher questions.
+2. Edge cases & exceptions — the carve-outs, exceptions, special provisions, boundary conditions.
+3. Cross-topic connections — where this topic touches other topics in the syllabus and how questions combine them.
+4. Expanded examples / illustrations — concrete examples that solidify the harder ideas.
+5. Higher-order PYP-style highlight points — the trickier patterns, often-missed nuances.
+
+Rules:
+- Do NOT repeat the basic / introductory facts already covered in the first batch.
+- Bold the key term/fact at the start of each bullet.
+- Substantial depth — this is the deeper-dive batch.`;
+
     case "objectives":
       return ctx + `
 Create 5-7 SCORING OBJECTIVES (skills the learner will master).

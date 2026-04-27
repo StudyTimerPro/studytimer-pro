@@ -2,24 +2,14 @@ import React, { useEffect, useMemo, useState } from "react";
 import { callAI } from "../../utils/aiService";
 import {
   buildTopicHierarchyPrompt, safeParseJSON,
-  pickActiveSubtopics, topicSlug, todayKey,
+  topicSlug, todayKey,
 } from "../../utils/materialPrompts";
 import {
   saveTopicHierarchy, listenTopicHierarchy, deleteTopicHierarchy,
   saveTopicProgress, listenAllDayProgress,
+  saveDayMap, listenDayMap,
 } from "../../firebase/db";
 import TopicDeepDive from "./TopicDeepDive";
-
-const STATUS_META = {
-  complete: { ic: "✅", label: "Complete", cls: "ok" },
-  pending:  { ic: "⌛", label: "Pending",  cls: "muted" },
-  skipped:  { ic: "❌", label: "Skipped",  cls: "bad" },
-};
-
-function statusOf(rec) {
-  if (!rec) return "pending";
-  return rec.status || "pending";
-}
 
 function durationLabel(s) {
   if (!s) return "—";
@@ -47,53 +37,87 @@ function durationMinsOf(s) {
   return 60;
 }
 
+function statusOf(rec) {
+  if (!rec) return "pending";
+  return rec.status || "pending";
+}
+
 export default function TopicHierarchyView({
   user, examId, planId, session, examName, planName, showToast,
 }) {
-  const [hierarchy, setHierarchy] = useState(null);   // { strategy, topics, generatedAt, ... }
+  const [hierarchy, setHierarchy] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [filter, setFilter] = useState("all");        // all | pending | complete
+  const [filter, setFilter] = useState("all");
   const [selectedDay, setSelectedDay] = useState(todayKey());
-  const [progress, setProgress] = useState({});       // { date: { slug: {status,...} } }
-  const [openTopic, setOpenTopic] = useState(null);   // {topic, importance, ...} when opened
+  const [progress, setProgress] = useState({});
+  const [dayMap, setDayMap] = useState({});  // { dateKey: studyDayNumber }
+  const [openTopic, setOpenTopic] = useState(null);
 
   const today = todayKey();
   const durationMins = durationMinsOf(session);
 
-  // Listen to hierarchy
   useEffect(() => {
     if (!user || !examId || !planId || !session?.id) return;
     const u = listenTopicHierarchy(user.uid, examId, planId, session.id, setHierarchy);
     return () => typeof u === "function" && u();
   }, [user, examId, planId, session?.id]);
 
-  // Listen to all day progress
   useEffect(() => {
     if (!user || !examId || !planId || !session?.id) return;
     const u = listenAllDayProgress(user.uid, examId, planId, session.id, setProgress);
     return () => typeof u === "function" && u();
   }, [user, examId, planId, session?.id]);
 
-  const activeSubtopics = useMemo(() => {
-    if (!hierarchy?.topics) return [];
-    return pickActiveSubtopics(hierarchy.topics, durationMins);
-  }, [hierarchy, durationMins]);
+  useEffect(() => {
+    if (!user || !examId || !planId || !session?.id) return;
+    const u = listenDayMap(user.uid, examId, planId, session.id, setDayMap);
+    return () => typeof u === "function" && u();
+  }, [user, examId, planId, session?.id]);
 
-  // Day list = today + any past days that have progress entries
+  // Auto-assign a study-day number to today on first visit
+  useEffect(() => {
+    if (!hierarchy?.topics) return;
+    if (dayMap[selectedDay]) return;
+    if (selectedDay !== today) return; // only auto-assign for today
+    const usedDays = Object.values(dayMap || {}).map(Number).filter(n => n > 0);
+    const nextDay = (usedDays.length ? Math.max(...usedDays) : 0) + 1;
+    saveDayMap(user.uid, examId, planId, session.id, selectedDay, nextDay).catch(() => {});
+  }, [hierarchy, dayMap, selectedDay, today, user, examId, planId, session?.id]);
+
+  const studyDay = dayMap[selectedDay] || 0;
+
+  // Subtopics filtered by the study-day for the selected calendar date
+  const activeSubtopics = useMemo(() => {
+    if (!hierarchy?.topics || !studyDay) return [];
+    const out = [];
+    for (const t of hierarchy.topics) {
+      const list = (t.subtopics || []).filter(st => Number(st.day_number) === Number(studyDay));
+      for (const st of list) {
+        out.push({
+          topic: t.topic,
+          importance: t.importance,
+          ...st,
+        });
+      }
+    }
+    return out;
+  }, [hierarchy, studyDay]);
+
+  const dayProgress = progress[selectedDay] || {};
+
   const dayOptions = useMemo(() => {
     const days = new Set([today]);
     Object.keys(progress || {}).forEach(d => days.add(d));
-    return Array.from(days).sort().reverse(); // most recent first
-  }, [progress, today]);
-
-  const dayProgress = progress[selectedDay] || {};
+    Object.keys(dayMap || {}).forEach(d => days.add(d));
+    return Array.from(days).sort().reverse();
+  }, [progress, dayMap, today]);
 
   const visibleSubtopics = useMemo(() => {
     if (filter === "all") return activeSubtopics;
     return activeSubtopics.filter(st => {
-      const st2 = statusOf(dayProgress[topicSlug(st.subtopic_name)]);
-      if (filter === "complete") return st2 === "complete";
-      return st2 !== "complete";
+      const s = statusOf(dayProgress[topicSlug(st.subtopic_name)]);
+      if (filter === "complete") return s === "complete";
+      return s !== "complete";
     });
   }, [activeSubtopics, dayProgress, filter]);
 
@@ -150,17 +174,6 @@ export default function TopicHierarchyView({
     });
   }
 
-  async function markSkipped(subtopic) {
-    const slug = topicSlug(subtopic.subtopic_name);
-    await saveTopicProgress(user.uid, examId, planId, session.id, selectedDay, slug, {
-      status: "skipped",
-      topic: subtopic.topic,
-      subtopic_name: subtopic.subtopic_name,
-      day_number: subtopic.day_number || null,
-    });
-  }
-
-  // Detail view
   if (openTopic) {
     return (
       <TopicDeepDive
@@ -176,7 +189,6 @@ export default function TopicHierarchyView({
     );
   }
 
-  // Empty state
   if (!hierarchy) {
     return (
       <div className="stp-mat-section">
@@ -185,8 +197,8 @@ export default function TopicHierarchyView({
           <div className="stp-mat-empty-title">No topic hierarchy yet</div>
           <div className="stp-mat-empty-desc">
             Generate a complete priority-ordered topic breakdown for{" "}
-            <strong>{session?.name || "this session"}</strong>. Subtopics activate based on your
-            session duration ({durationLabel(session)}).
+            <strong>{session?.name || "this session"}</strong>. Each calendar date will reveal its
+            own day's subtopics.
           </div>
           <button className="stp-btn primary" onClick={generateHierarchy} disabled={busy}>
             {busy ? "Generating…" : "✨ Generate hierarchy"}
@@ -209,9 +221,11 @@ export default function TopicHierarchyView({
           <div className="stp-mat-day-pick">
             <label>Day</label>
             <select value={selectedDay} onChange={e => setSelectedDay(e.target.value)}>
-              {dayOptions.map(d => (
-                <option key={d} value={d}>{d === today ? `Today (${d})` : d}</option>
-              ))}
+              {dayOptions.map(d => {
+                const studyDay = dayMap[d];
+                const label = (d === today ? `Today` : d) + (studyDay ? ` · Day ${studyDay}` : "");
+                return <option key={d} value={d}>{label} ({d})</option>;
+              })}
             </select>
           </div>
           <div className="stp-mat-filter">
@@ -226,47 +240,57 @@ export default function TopicHierarchyView({
           </button>
         </div>
 
-        <div className="stp-mat-summary">
-          <div><span className="v">{activeSubtopics.length}</span><span className="l">Active today</span></div>
-          <div className="ok"><span className="v">{counts.complete || 0}</span><span className="l">Complete</span></div>
-          <div className="warn"><span className="v">{(counts.pending || 0) + (activeSubtopics.length - (counts.complete || 0) - (counts.skipped || 0) - (counts.pending || 0))}</span><span className="l">Pending</span></div>
-          <div className="bad"><span className="v">{counts.skipped || 0}</span><span className="l">Skipped</span></div>
-        </div>
+        {studyDay > 0 && (
+          <div className="stp-mat-summary">
+            <div><span className="v">{activeSubtopics.length}</span><span className="l">Day {studyDay} topics</span></div>
+            <div className="ok"><span className="v">{counts.complete || 0}</span><span className="l">Complete</span></div>
+            <div className="warn"><span className="v">{(counts.pending || 0) + (activeSubtopics.length - (counts.complete || 0) - (counts.pending || 0))}</span><span className="l">Pending</span></div>
+            <div><span className="v">{durationLabel(session)}</span><span className="l">Duration</span></div>
+          </div>
+        )}
       </div>
 
       <div className="stp-mat-section">
-        <div className="stp-mat-section-title">Topics for this session</div>
-        {visibleSubtopics.length === 0 ? (
-          <div className="stp-mat-empty">No subtopics match this filter.</div>
+        <div className="stp-mat-section-title">
+          {studyDay > 0 ? `Day ${studyDay} subtopics` : "Subtopics"}
+        </div>
+        {studyDay === 0 ? (
+          <div className="stp-mat-empty">Open this date for the first time to assign a study day.</div>
+        ) : visibleSubtopics.length === 0 ? (
+          <div className="stp-mat-empty">
+            {activeSubtopics.length === 0
+              ? `No subtopics generated for Day ${studyDay}. Try regenerating with more days of coverage.`
+              : "No subtopics match this filter."}
+          </div>
         ) : (
           <div className="stp-topic-list">
             {visibleSubtopics.map((st, i) => {
               const slug = topicSlug(st.subtopic_name);
               const s = statusOf(dayProgress[slug]);
-              const meta = STATUS_META[s] || STATUS_META.pending;
+              const isComplete = s === "complete";
               return (
-                <div key={slug + i} className={`stp-topic-card ${meta.cls}`}>
+                <div key={slug + i} className={`stp-topic-card ${isComplete ? "ok" : "muted"}`}>
                   <div className="stp-topic-head">
                     <div className="stp-topic-pri" data-pri={String(st.importance || "Medium").toLowerCase()}>
                       {st.importance || "Medium"}
                     </div>
-                    <div className="stp-topic-day">Day {st.day_number || i + 1}</div>
-                    <button
-                      className={`stp-topic-status ${meta.cls}`}
-                      onClick={() => toggleStatus(st)}
-                      title="Toggle complete"
-                    >
-                      <span aria-hidden>{meta.ic}</span> {meta.label}
-                    </button>
+                    <div className="stp-topic-day">Day {st.day_number || studyDay}</div>
                   </div>
                   <div className="stp-topic-name">{st.subtopic_name}</div>
                   <div className="stp-topic-parent">{st.topic}</div>
                   {st.focus && <div className="stp-topic-focus">{st.focus}</div>}
                   <div className="stp-topic-actions">
                     <button className="stp-btn small primary" onClick={() => setOpenTopic(st)}>🔍 Deep dive</button>
-                    {s !== "skipped" && (
-                      <button className="stp-btn small ghost" onClick={() => markSkipped(st)}>Mark skipped</button>
-                    )}
+                    <button
+                      className={`stp-toggle-btn${isComplete ? " on" : ""}`}
+                      onClick={() => toggleStatus(st)}
+                      role="switch"
+                      aria-checked={isComplete}
+                      title={isComplete ? "Mark pending" : "Mark complete"}
+                    >
+                      <span className="track"><span className="thumb" /></span>
+                      <span className="lbl">{isComplete ? "Complete" : "Pending"}</span>
+                    </button>
                   </div>
                 </div>
               );
