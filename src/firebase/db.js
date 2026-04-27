@@ -165,6 +165,61 @@ export function deleteSessionMaterial(uid, examId, planId, sessionId, materialId
   return remove(ref(db, `${materialsPath(uid, examId, planId, sessionId)}/${materialId}`));
 }
 
+// ── Topic hierarchy (per-session) ──────────────────────────────────
+function hierarchyPath(uid, examId, planId, sessionId) {
+  return `exams/${uid}/${examId}/plans/${planId}/sessions/${sessionId}/topicHierarchy`;
+}
+export function saveTopicHierarchy(uid, examId, planId, sessionId, payload) {
+  return set(ref(db, hierarchyPath(uid, examId, planId, sessionId)), {
+    ...payload,
+    updatedAt: Date.now(),
+  });
+}
+export function listenTopicHierarchy(uid, examId, planId, sessionId, callback) {
+  const r = ref(db, hierarchyPath(uid, examId, planId, sessionId));
+  const cb = snap => callback(snap.val() || null);
+  onValue(r, cb);
+  return () => off(r, "value", cb);
+}
+export function deleteTopicHierarchy(uid, examId, planId, sessionId) {
+  return remove(ref(db, hierarchyPath(uid, examId, planId, sessionId)));
+}
+
+// ── Deep-dive capsule cache (per topic, per capsuleId) ─────────────
+function capsulesPath(uid, examId, planId, sessionId, slug) {
+  return `exams/${uid}/${examId}/plans/${planId}/sessions/${sessionId}/capsules/${slug}`;
+}
+export function saveCapsule(uid, examId, planId, sessionId, slug, capsuleId, content) {
+  return set(ref(db, `${capsulesPath(uid, examId, planId, sessionId, slug)}/${capsuleId}`), {
+    content: content || "",
+    updatedAt: Date.now(),
+  });
+}
+export function listenCapsules(uid, examId, planId, sessionId, slug, callback) {
+  const r = ref(db, capsulesPath(uid, examId, planId, sessionId, slug));
+  const cb = snap => callback(snap.val() || {});
+  onValue(r, cb);
+  return () => off(r, "value", cb);
+}
+
+// ── Topic completion + day-wise activation ─────────────────────────
+// Path: exams/{uid}/{examId}/plans/{planId}/sessions/{sessionId}/dayProgress/{date}/{slug}
+function dayProgressPath(uid, examId, planId, sessionId, dateKey) {
+  return `exams/${uid}/${examId}/plans/${planId}/sessions/${sessionId}/dayProgress/${dateKey}`;
+}
+export function saveTopicProgress(uid, examId, planId, sessionId, dateKey, slug, data) {
+  return set(ref(db, `${dayProgressPath(uid, examId, planId, sessionId, dateKey)}/${slug}`), {
+    ...data,
+    updatedAt: Date.now(),
+  });
+}
+export function listenAllDayProgress(uid, examId, planId, sessionId, callback) {
+  const r = ref(db, `exams/${uid}/${examId}/plans/${planId}/sessions/${sessionId}/dayProgress`);
+  const cb = snap => callback(snap.val() || {});
+  onValue(r, cb);
+  return () => off(r, "value", cb);
+}
+
 // ── Export / Import ────────────────────────────────────────────────
 export async function exportExam(uid, examId) {
   const snap = await get(ref(db, `exams/${uid}/${examId}`));

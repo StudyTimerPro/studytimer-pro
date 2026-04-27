@@ -12,7 +12,7 @@ import {
 import AIPlanModal from "../components/plan/AIPlanModal";
 import AddExamModal from "../components/plan/AddExamModal";
 import ExamPlanSelector from "../components/plan/ExamPlanSelector";
-import SessionMaterialSheet from "../components/plan/SessionMaterialSheet";
+import SessionMaterial from "./SessionMaterial";
 import { LoadingOverlay } from "../components/common/LoadingAnimation";
 
 /*
@@ -36,8 +36,8 @@ export default function TodaysPlan() {
   const { startSession, pause, reset, timerRunning, timerSeconds, activeSession, formatTime } = useTimer();
   const {
     sessions, setSessions, showToast,
-    exams, setExams, currentExamId, setCurrentExamId, setCurrentExamName,
-    plans, setPlans, currentPlanId, setCurrentPlanId, setCurrentPlanName,
+    exams, setExams, currentExamId, setCurrentExamId, currentExamName, setCurrentExamName,
+    plans, setPlans, currentPlanId, setCurrentPlanId, currentPlanName, setCurrentPlanName,
     sessionStudied, setSessionStudied,
     currentPlanMode, setCurrentPlanMode,
   } = useStore();
@@ -849,12 +849,14 @@ export default function TodaysPlan() {
         />
       )}
 
-      {/* SESSION MATERIAL BOTTOM SHEET */}
+      {/* SESSION MATERIAL — full-page */}
       {materialSession && (
-        <SessionMaterialSheet
+        <SessionMaterial
           user={user}
           examId={currentExamId}
           planId={currentPlanId}
+          examName={currentExamName}
+          planName={currentPlanName}
           session={materialSession}
           showToast={showToast}
           initialQuickType={materialQuickType}

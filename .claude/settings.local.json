@@ -14,7 +14,11 @@
       "Bash(firebase deploy *)",
       "Bash(node -e \"require\\('./functions/index.js'\\)\")",
       "Bash(node -e \"require\\('./index.js'\\)\")",
-      "PowerShell(Get-Content *)"
+      "PowerShell(Get-Content *)",
+      "Read(//e/StudyTimerPro/**)",
+      "Bash(powershell -c \"\\(Get-Content 'E:\\\\StudyTimerPro\\\\material_handler_mixin.py' | Measure-Object -Line\\).Lines\")",
+      "PowerShell(\\(Get-Content \"C:\\\\Users\\\\krish\\\\studytimer-pro\\\\src\\\\redesign\\\\theme.css\" | Measure-Object -Line\\).Lines)",
+      "PowerShell(npm run *)"
     ]
   }
 }

@@ -1,0 +1,335 @@
+// materialPrompts.js
+// Ported (and slimmed) from material_handler_mixin.py:
+//   _create_enhanced_material_prompt  → buildTopicHierarchyPrompt
+//   _get_enhanced_capsule_prompt      → buildCapsulePrompt
+// Plus simple prompts for Notes / MCQs / Summary / Upload-content.
+
+export const CAPSULES = [
+  { id: "objectives", emoji: "🎯", title: "Scoring Objectives" },
+  { id: "concepts",   emoji: "📖", title: "Core Concepts" },
+  { id: "formulas",   emoji: "📐", title: "Key Formulas" },
+  { id: "practice",   emoji: "📚", title: "Practice Problems" },
+  { id: "strategy",   emoji: "💡", title: "Exam Strategy" },
+  { id: "sources",    emoji: "📑", title: "Study Materials" },
+  { id: "preview",    emoji: "🔮", title: "Tomorrow's Preview" },
+];
+
+export const MATERIAL_TYPES = [
+  { id: "notes",     label: "Notes",          ic: "📝", desc: "Structured study notes" },
+  { id: "mcq",       label: "MCQs",           ic: "❓", desc: "Practice questions with answers" },
+  { id: "summary",   label: "Summary",        ic: "📄", desc: "Quick revision sheet" },
+  { id: "hierarchy", label: "Topic Hierarchy",ic: "🗂", desc: "Day-wise topic breakdown" },
+];
+
+export function priorityToDifficulty(priority) {
+  const p = String(priority || "").toLowerCase();
+  if (p === "high") return "hard";
+  if (p === "low")  return "easy";
+  return "medium";
+}
+
+function urgencyOf(daysUntilExam) {
+  const d = Number(daysUntilExam) || 999;
+  if (d <= 3)  return { tag: "CRITICAL", note: "Focus ONLY on highest priority topics. Skip basics completely." };
+  if (d <= 7)  return { tag: "HIGH",     note: "Prioritize high-weightage topics only. Quick coverage needed." };
+  if (d <= 15) return { tag: "MEDIUM",   note: "Balance coverage and depth. Focus on important topics." };
+  return        { tag: "NORMAL",   note: "Comprehensive coverage with gradual progression possible." };
+}
+
+// ── Topic hierarchy ───────────────────────────────────────────────────────
+export function buildTopicHierarchyPrompt({
+  sessionName, examName, planName, durationMinutes,
+  daysUntilExam, currentDay,
+}) {
+  const subject = planName || sessionName;
+  const u = urgencyOf(daysUntilExam);
+
+  return `Create a COMPLETE topic hierarchy for ${sessionName} (${examName || "exam"}).
+
+SESSION: ${sessionName}
+SUBJECT: ${subject}
+EXAM: ${examName || "—"}
+DAYS LEFT: ${daysUntilExam ?? "unknown"}
+URGENCY: ${u.tag} — ${u.note}
+
+REQUIREMENTS:
+1. Generate ALL topics in priority order: High → Medium → Low.
+2. Each topic must have 3-8 subtopics. Each subtopic = 1 day of focused study.
+3. Subtopic names must be SPECIFIC and actionable (not "Day X focus").
+4. Stay strictly within the subject domain — do not mix subjects.
+5. Use HONEST language: "commonly tested", "high priority", "frequently asked".
+   Do NOT invent years (e.g. "asked in 2019, 2021"). Do NOT invent statistics.
+
+Return ONLY valid JSON in this exact shape (no markdown, no commentary):
+
+{
+  "strategy": {
+    "total_content_scope": "string",
+    "why_these_topics": "string",
+    "expected_topics": "string",
+    "time_allocation": "Progressive reveal based on session duration"
+  },
+  "topics": [
+    {
+      "topic": "Fundamental Rights",
+      "importance": "High",
+      "exam_frequency": "Very frequently asked",
+      "scoring_potential": "3-5 marks per question typical",
+      "estimated_days": 5,
+      "subtopics": [
+        {
+          "subtopic_name": "Right to Equality - Articles 12-18",
+          "day_number": 1,
+          "focus": "Equality provisions and landmark cases",
+          "content_brief": "150-300 words covering key concepts",
+          "scoring_tips": "Common question patterns and mark allocation",
+          "estimated_time": "${durationMinutes || 60} minutes"
+        }
+      ]
+    }
+  ]
+}
+
+Rules:
+- 12-25 topics total (complete subject coverage).
+- 3-8 subtopics per topic.
+- Strict priority order: High → Medium → Low.
+- Valid JSON only, no trailing commas, no extra prose.`;
+}
+
+// ── Deep-dive capsules ────────────────────────────────────────────────────
+export function buildCapsulePrompt({
+  capsuleId, topicName, sessionName, examName,
+  contentBrief, currentDay, daysUntilExam, durationMinutes,
+}) {
+  const ctx = `Topic: ${topicName} (Day ${currentDay || 1})
+Exam: ${examName || "—"}
+Session: ${sessionName}
+Days Left: ${daysUntilExam ?? "unknown"}
+Focus: ${contentBrief || "—"}
+
+Requirements:
+- Use HONEST language. Do NOT invent years or statistics.
+- Specific to this exam pattern. Help score marks, not just theory.
+- Plain prose with simple bullets. NO heavy markdown — light structure only.
+`;
+
+  switch (capsuleId) {
+    case "objectives":
+      return ctx + `
+Create 5-7 SCORING OBJECTIVES (skills the learner will master).
+For each: specific question type, scoring potential, expected solving time, target accuracy.
+
+Examples (style only — replace with topic-relevant ones):
+- Solve article-based matching questions (typically 2 marks each, 1 min/question)
+- Master quick recall of constitutional amendments (high-frequency, 2 marks typical, aim 80%+ accuracy)
+
+Output as a clean numbered list with one objective per item. No fake years.`;
+
+    case "concepts":
+      return ctx + `
+Cover CORE CONCEPTS for this topic in 4 sections:
+1. Important concepts — each with priority tag (High / Commonly tested / Important) and scoring potential.
+2. Question patterns — how this concept is tested (direct recall, calculation, comparison) + common traps.
+3. Quick revision points — bullet points for last-minute revision, memory tricks, must-remember facts.
+4. Concept connections — how this links to related topics; combination-question potential.
+
+No generic theory. Exam-focused content only.`;
+
+    case "formulas":
+      return ctx + `
+List 8-15 KEY FORMULAS for this topic (skip if not formula-heavy — instead list 8-12 must-remember facts/figures).
+
+For each formula:
+- Formula (plain text)
+- Priority (High / Commonly used / Important)
+- When asked (typical question pattern)
+- Common mistake (what students get wrong)
+- Quick check (sanity check on the answer)
+- Solving time (30s / 1min / 2min)
+- Shortcut (faster method, if any)
+
+Use plain symbols: η α β π Δ Σ √ × ÷ ≈ ≤ ≥ θ ω λ μ.`;
+
+    case "practice":
+      return ctx + `
+PRACTICE PROBLEMS — exam-style. Don't invent fake PYQ years.
+
+Section A — Solved Examples (3 problems):
+Each: question type, typical marks, full question, complete solution with steps,
+the shortcut/trick, why each wrong option is wrong, expected solving time.
+
+Section B — Practice Set (6 problems):
+2 easy, 2 medium, 2 hard. Each ends with "Answer: ..." and a 1-2 line explanation.
+
+Section C — Common Mistakes (top 5):
+Wrong approach → why it's wrong → correct approach.
+
+Section D — Scoring Strategy:
+Which questions to attempt first; when to skip; time allocation per question.`;
+
+    case "strategy":
+      return ctx + `
+EXAM STRATEGY for this topic — actionable, step-by-step:
+
+1. Question identification — keywords/phrases that signal this topic; how to spot it fast.
+2. Solving sequence — Step 1, Step 2, Step 3 with time per step. When to use shortcuts.
+3. Elimination techniques — for MCQs: how to remove obviously-wrong options, traps to watch.
+4. Time management — expected time per question type; when to skip and move on.
+5. Mark maximization — partial-marking tactics; negative-marking risk-vs-reward.
+6. Last-minute tips — what to revise 5 minutes before exam.
+
+Be specific to ${examName || "this exam"}'s pattern.`;
+
+    case "sources":
+      return ctx + `
+STUDY MATERIALS — only widely-used, aspirant-verified resources for ${examName || "this exam"}.
+
+Sections:
+📚 Recommended Books (3-5): full name, author, chapters/pages to focus, why recommended.
+🌐 Online Resources: only well-known sites (NCERT, official exam portal, etc.). Include URL only if you are highly confident it's correct and stable.
+📺 YouTube Channels: name + best playlist for this topic + language.
+📱 Apps: name, platform, specific use, free/paid.
+💡 Effective usage tips — how to combine these resources, recommended sequence.
+
+Rules:
+- Prioritize FREE resources first.
+- Do NOT make up URLs. If unsure, omit the URL — just describe how to find the resource.
+- No affiliate links or paid promotions.`;
+
+    case "preview":
+      return ctx + `
+TOMORROW'S PREVIEW (Day ${(currentDay || 1) + 1}) — concrete and actionable:
+
+1. EXACT TOPICS (2-4 items): topic name, what learner will do, scoring potential.
+2. TIME BREAKDOWN — fit ${durationMinutes || 60} minutes total. Use ranges:
+   • 00-15 min: [activity + deliverable]
+   • 15-35 min: [activity + deliverable]
+   • etc. (segments must sum to total)
+3. PRACTICE PLAN — exact number of questions, time limit, target accuracy.
+4. CONNECTION TO TODAY — 2-3 sentences on how tomorrow builds on ${topicName}.
+5. PREPARATION CHECKLIST — what to keep ready tonight; quick pre-read; mindset tip.
+
+Be SPECIFIC. This is an action plan, not a wish list.`;
+
+    default:
+      return ctx + `\nGenerate exam-focused content for this topic.`;
+  }
+}
+
+// ── Simple types (Notes / MCQ / Summary) ──────────────────────────────────
+export function buildSimplePrompt({ type, topic, difficulty, length, examName }) {
+  const lenHint =
+    length === "quick" ? "Keep it under ~150 words for a 1-minute read." :
+    length === "deep"  ? "Be thorough; include depth and worked examples." :
+                         "Standard length; concise and exam-focused.";
+  const examLine = examName ? `Tailor for: ${examName}.` : "";
+
+  if (type === "notes") {
+    return `Create structured study notes on: ${topic}
+
+Cover:
+- Key concepts and definitions
+- Important formulas (if applicable)
+- 3-5 worked examples
+- Quick revision points (bullets)
+
+${lenHint}
+Difficulty: ${difficulty}. ${examLine}
+Use light structure with short paragraphs and bullets — NO heavy markdown.`;
+  }
+
+  if (type === "mcq") {
+    const n = length === "quick" ? 5 : length === "deep" ? 15 : 10;
+    return `Create ${n} exam-style MCQs on: ${topic}
+
+Format each question:
+Q1. <question>
+A) <option>
+B) <option>
+C) <option>
+D) <option>
+Answer: <letter>
+Why: <1-2 line explanation>
+
+Difficulty: ${difficulty}. ${examLine}
+Don't repeat answer letter distribution; use realistic distractors.`;
+  }
+
+  // summary
+  return `Summarize ${topic} into a 1-page quick revision sheet.
+
+Sections:
+- Key points (bullets)
+- Important terms
+- Must-remember facts
+
+${lenHint}
+Difficulty: ${difficulty}. ${examLine}
+Use bullets and short lines.`;
+}
+
+export function buildUploadPrompt(extracted) {
+  return `You are a study assistant.
+Convert the uploaded content below into structured exam-focused study material.
+
+Output sections:
+1. Key Concepts (bullets)
+2. Short Summary (max 150 words)
+3. Important Points to Remember (bullets)
+4. 5 MCQs with answers and short explanations
+5. 3 Revision Questions (open-ended)
+
+CONTENT:
+---
+${extracted}
+---`;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+export function safeParseJSON(text) {
+  if (!text) return null;
+  // Strip markdown code fences if model returned ```json ... ```
+  const cleaned = String(text)
+    .replace(/^\s*```(?:json)?\s*/i, "")
+    .replace(/```\s*$/i, "")
+    .trim();
+  try { return JSON.parse(cleaned); } catch {}
+  // Fallback: find first { ... last }
+  const a = cleaned.indexOf("{");
+  const b = cleaned.lastIndexOf("}");
+  if (a >= 0 && b > a) {
+    try { return JSON.parse(cleaned.slice(a, b + 1)); } catch {}
+  }
+  return null;
+}
+
+// Subtopic activation logic — pick subtopics that fit today's session duration.
+// Mirrors _filter_topics_by_duration: shorter duration → fewer subtopics.
+export function pickActiveSubtopics(topics, durationMinutes) {
+  const d = Number(durationMinutes) || 60;
+  let perTopic;
+  if (d <= 30)       perTopic = 1;
+  else if (d <= 60)  perTopic = 2;
+  else if (d <= 90)  perTopic = 3;
+  else if (d <= 120) perTopic = 4;
+  else               perTopic = 6;
+  return (topics || []).flatMap(t =>
+    (t.subtopics || []).slice(0, perTopic).map(st => ({
+      topic: t.topic,
+      importance: t.importance,
+      ...st,
+    }))
+  );
+}
+
+export function topicSlug(name) {
+  return String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 80);
+}
+
+export function todayKey(d = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
