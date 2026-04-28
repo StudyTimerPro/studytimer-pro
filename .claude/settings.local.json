@@ -21,7 +21,8 @@
       "PowerShell(npm run *)",
       "Bash(powershell -c \"\\(Get-Content 'E:\\\\my-project\\\\functions\\\\index.js' | Measure-Object -Line\\).Lines\")",
       "PowerShell(\\(Get-Content 'E:\\\\my-project\\\\functions\\\\index.js' | Measure-Object -Line\\).Lines)",
-      "PowerShell($total = \\(Get-Content 'E:\\\\my-project\\\\functions\\\\index.js' | Measure-Object -Line\\).Lines; \\(Get-Content 'E:\\\\my-project\\\\functions\\\\index.js' -Tail 30\\) | Out-String)"
+      "PowerShell($total = \\(Get-Content 'E:\\\\my-project\\\\functions\\\\index.js' | Measure-Object -Line\\).Lines; \\(Get-Content 'E:\\\\my-project\\\\functions\\\\index.js' -Tail 30\\) | Out-String)",
+      "Bash(node *)"
     ]
   }
 }

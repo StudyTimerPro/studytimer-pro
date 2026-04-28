@@ -132,7 +132,7 @@ export default function AIPlanModal({ user, onClose, onCreated }) {
       ];
       const reply = await callAI(
         [...planHistory.current, { role: "system", content: getLanguageReminder(language) }],
-        "gpt-4o-mini", 0.7
+        "gpt-4o-mini", 0.7, "ai_coach.kickoff"
       );
       planHistory.current.push({ role: "assistant", content: reply });
       setPlanChat([{ role: "assistant", content: reply }]);
@@ -200,7 +200,8 @@ export default function AIPlanModal({ user, onClose, onCreated }) {
           setQaChat(p => { const n = [...p]; n[n.length - 1] = { role: "assistant", content: full }; return n; });
           qaHistory.current.push({ role: "assistant", content: full });
           setBusy(false);
-        }
+        },
+        "ai_coach.qa"
       );
     } catch (err) {
       setQaChat(p => { const n = [...p]; n[n.length - 1] = { role: "assistant", content: "Something went wrong." }; return n; });
@@ -292,7 +293,8 @@ export default function AIPlanModal({ user, onClose, onCreated }) {
           setPlanChat(p => { const n = [...p]; n[n.length - 1] = { role: "assistant", content: full }; return n; });
           planHistory.current.push({ role: "assistant", content: full });
           setBusy(false);
-        }
+        },
+        "ai_coach.plan_chat"
       );
     } catch (err) {
       setPlanChat(p => { const n = [...p]; n[n.length - 1] = { role: "assistant", content: "Something went wrong." }; return n; });

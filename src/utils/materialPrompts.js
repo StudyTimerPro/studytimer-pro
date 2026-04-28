@@ -312,6 +312,79 @@ Difficulty: ${difficulty}. ${examLine}
 Use bullets and short lines.`;
 }
 
+// ── Revision questions (spaced-repetition) ────────────────────────────────
+// Generate level-appropriate questions for a single subtopic.
+// Format:
+//   level 0 → MCQ          (1st revision — recognise)
+//   level 1 → Hint recall   (2nd revision — reduce support)
+//   level 2 → Pure recall   (3rd revision — no options)
+//   level 3 → Timed recall  (4th revision — speed)
+//   level 4 → Applied       (5th revision — twisted)
+//   level 5 → Master refresh (mixed twisted)
+export function buildRevisionQuestionsPrompt({
+  topicName, subtopicName, focus, examName, level,
+}) {
+  const lvl = Math.max(0, Math.min(5, Number(level) || 0));
+  const formatLine = [
+    "Format: 4-option MCQ. Provide options A-D, the correct letter, and a 1-2 line explanation.",
+    "Format: Hint-based recall. Provide a SHORT hint (max 12 words) plus the full answer and a 1-2 line explanation.",
+    "Format: Pure recall. Plain question, NO options, NO hint. Provide the full answer and explanation.",
+    "Format: Timed recall. Short snappy question that can be answered in under 5 seconds. Provide the answer and explanation.",
+    "Format: Applied / twisted. Re-frame the concept in a slightly altered scenario or comparison so the learner must reason. Provide the answer and explanation.",
+    "Format: Mixed master refresh — a hard applied question that combines this concept with adjacent ideas. Provide the answer and explanation.",
+  ][lvl];
+
+  return `Generate exam-style revision questions for ONE subtopic.
+
+EXAM: ${examName || "—"}
+TOPIC: ${topicName}
+SUBTOPIC: ${subtopicName}
+FOCUS BRIEF: ${focus || "—"}
+REVISION LEVEL: ${lvl} (${LEVEL_LABELS[lvl]})
+${formatLine}
+
+PROCESS (follow these steps internally before writing JSON):
+1. Extract 3-5 KEY POINTS from the subtopic — the actual facts, definitions, formulas,
+   rules, exceptions or distinctions a learner must know. Skip filler.
+2. Generate EXACTLY ONE question per key point (one concept per question).
+3. If the subtopic is genuinely tiny, fall back to 2 questions; if it's huge, cap at 7.
+4. Stay within the subtopic — do not test adjacent topics.
+5. Use HONEST language. Do NOT invent years or fabricate statistics.
+
+Return ONLY valid JSON in this exact shape:
+
+{
+  "key_points": ["string", ...],
+  "questions": [
+    {
+      "key_point": "string",
+      "question": "string",
+      "options": ["A) ...", "B) ...", "C) ...", "D) ..."],   // ONLY for MCQ; OMIT this field for other formats
+      "hint": "string",                                       // ONLY for hint-recall; OMIT otherwise
+      "answer": "string",
+      "explanation": "string"
+    }
+  ]
+}
+
+Rules:
+- Questions array length must equal key_points array length (1:1).
+- Aim for 3-5 questions, minimum 2, maximum 7.
+- For MCQ: provide exactly 4 options labelled "A) ...", "B) ...", "C) ...", "D) ...".
+- For non-MCQ formats: do NOT include the options field.
+- For hint-recall: include the "hint" field; for all other formats omit it.
+- Valid JSON only. No markdown. No commentary. No trailing commas.`;
+}
+
+const LEVEL_LABELS = [
+  "Level 1 — MCQ recognition",
+  "Level 2 — Hint-based recall",
+  "Level 3 — Pure recall",
+  "Level 4 — Timed recall",
+  "Level 5 — Applied / twisted",
+  "Mastered — long-term refresh",
+];
+
 export function buildUploadPrompt(extracted) {
   return `You are a study assistant.
 Convert the uploaded content below into structured exam-focused study material.

@@ -9,6 +9,7 @@ import {
   saveTopicProgress, listenAllDayProgress,
   saveDayMap, listenDayMap,
 } from "../../firebase/db";
+import { ensureRevisionItem, removeRevisionItem } from "../../firebase/revisionDb";
 import TopicDeepDive from "./TopicDeepDive";
 
 function durationLabel(s) {
@@ -172,6 +173,22 @@ export default function TopicHierarchyView({
       subtopic_name: subtopic.subtopic_name,
       day_number: subtopic.day_number || null,
     });
+    // Mirror to the revision queue: completing schedules first revision Day+1;
+    // un-marking removes the entry.
+    try {
+      if (next === "complete") {
+        await ensureRevisionItem(user.uid, examId, planId, slug, {
+          topic: subtopic.topic,
+          subtopic_name: subtopic.subtopic_name,
+          focus: subtopic.focus || subtopic.content_brief || "",
+          importance: subtopic.importance || "Medium",
+          sessionId: session.id,
+          sessionName: session.name,
+        });
+      } else {
+        await removeRevisionItem(user.uid, examId, planId, slug);
+      }
+    } catch { /* non-fatal */ }
   }
 
   if (openTopic) {

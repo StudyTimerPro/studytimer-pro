@@ -13,6 +13,10 @@ import { ref, runTransaction, update, push, onValue, off, get } from "firebase/d
 
 export const DEFAULT_LIMIT = 100_000;
 
+// Cloud Function endpoint that appends the row to Web-app-stats / api_data_track.
+// Best-effort: failures are silently swallowed.
+const SHEET_SYNC_URL = "https://us-central1-leaderboard-98e8c.cloudfunctions.net/tokensSheetSync";
+
 // Per-million pricing (USD). Sourced from the user's `model_price` sheet.
 // Falls back to these defaults when sheet hasn't been synced yet.
 export const MODEL_PRICING = {
@@ -123,6 +127,24 @@ export async function recordUsage(uid, { model, promptTokens, completionTokens, 
       costUsd: cost, baseTokens, label: label || null,
       ts: Date.now(),
     });
+  } catch { /* ignore */ }
+
+  // Mirror to Web-app-stats Google Sheet (best-effort, fire-and-forget).
+  try {
+    const snap = await get(walletRef(uid));
+    const v = snap.val() || {};
+    fetch(SHEET_SYNC_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        uid, model,
+        promptTokens: pTok, completionTokens: cTok,
+        baseTokens, costUsd: cost,
+        label: label || null,
+        used:  Number(v.used)  || 0,
+        limit: Number(v.limit) || DEFAULT_LIMIT,
+      }),
+    }).catch(() => {});
   } catch { /* ignore */ }
 
   return baseTokens;

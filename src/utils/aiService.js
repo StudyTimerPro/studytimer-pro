@@ -7,7 +7,7 @@ import {
 } from "./tokenTracker";
 
 // ─── Basic call helpers ─────────────────────────────────────────────────────
-export async function callAI(messages, model = "gpt-4o-mini", temperature = 0.7) {
+export async function callAI(messages, model = "gpt-4o-mini", temperature = 0.7, label = null) {
   const uid = useStore.getState().user?.uid || null;
   // Block the call if the user has hit their token limit
   if (uid) {
@@ -36,13 +36,13 @@ export async function callAI(messages, model = "gpt-4o-mini", temperature = 0.7)
   const completionTokens = Number(usage?.completion_tokens) || estimateTokens(text);
 
   if (uid) {
-    recordUsage(uid, { model, promptTokens, completionTokens }).catch(() => {});
+    recordUsage(uid, { model, promptTokens, completionTokens, label }).catch(() => {});
   }
 
   return text;
 }
 
-export async function callAIStream(messages, model = "gpt-4o-mini", onChunk, onDone) {
+export async function callAIStream(messages, model = "gpt-4o-mini", onChunk, onDone, label = null) {
   const uid = useStore.getState().user?.uid || null;
   if (uid) {
     try { await assertHasBalance(uid); }
@@ -84,6 +84,7 @@ export async function callAIStream(messages, model = "gpt-4o-mini", onChunk, onD
               model,
               promptTokens: estimateMessageTokens(messages),
               completionTokens: estimateTokens(collected),
+              label,
             }).catch(() => {});
           }
           onDone?.();
@@ -166,7 +167,8 @@ export async function parseStudyInfo(userMsg) {
         { role: "user", content: parsePrompt },
       ],
       "gpt-4o-mini",
-      0.3
+      0.3,
+      "ai_coach.parse_study_info"
     );
     response = response.trim();
     if (response.includes("{")) {
@@ -238,7 +240,8 @@ Give me the complete comprehensive list for ${examName}.`;
       { role: "user", content: analysisPrompt },
     ],
     "gpt-4.1",
-    0.3
+    0.3,
+    "ai_coach.stage1"
   );
 }
 
@@ -303,7 +306,8 @@ START WITH { END WITH }`;
       { role: "user", content: structurePrompt },
     ],
     "gpt-4o-mini",
-    0.0
+    0.0,
+    "ai_coach.stage2"
   );
 
   try {

@@ -14,6 +14,8 @@ import AddExamModal from "../components/plan/AddExamModal";
 import ExamPlanSelector from "../components/plan/ExamPlanSelector";
 import SessionMaterial from "./SessionMaterial";
 import { LoadingOverlay } from "../components/common/LoadingAnimation";
+import DueTodayBanner from "../components/revision/DueTodayBanner";
+import SessionRevisionModal from "../components/revision/SessionRevisionModal";
 
 /*
  * NOTE: useIsMobile is also defined inside ExamPlanSelector.jsx.
@@ -45,10 +47,12 @@ export default function TodaysPlan() {
   const [showModeSwitch, setShowModeSwitch] = useState(false);
   const [materialSession, setMaterialSession] = useState(null);
   const [materialQuickType, setMaterialQuickType] = useState(null);
+  const [reviseSession, setReviseSession] = useState(null);
   function openMaterial(s, quickType = null) {
     setMaterialSession(s);
     setMaterialQuickType(quickType);
   }
+  function openRevise(s) { setReviseSession(s); }
 
   const [studiedLoaded, setStudiedLoaded] = useState(false);
   const isMobile = useIsMobile();
@@ -527,6 +531,18 @@ export default function TodaysPlan() {
           </div>
         </section>
 
+        {/* DUE-TODAY BANNER */}
+        {hasPlan && (
+          <DueTodayBanner
+            user={user}
+            examId={currentExamId}
+            planId={currentPlanId}
+            examName={currentExamName}
+            sessions={sessions}
+            showToast={showToast}
+          />
+        )}
+
         {/* TOOLBAR */}
         <div className="stp-toolbar">
           <div className="stp-toolbar-actions">
@@ -599,6 +615,7 @@ export default function TodaysPlan() {
               onEdit={openEdit}
               onDelete={handleDelete}
               onMaterial={openMaterial}
+              onRevise={openRevise}
               formatTime={formatTime}
             />
           )
@@ -755,6 +772,9 @@ export default function TodaysPlan() {
                           <button className="stp-act" title="Material" onClick={() => openMaterial(s)}>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
                           </button>
+                          <button className="stp-act revise" title="Revise" onClick={() => openRevise(s)}>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>
+                          </button>
                           <button className="stp-act danger" title="Delete" onClick={() => handleDelete(s.id)}>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>
                           </button>
@@ -812,6 +832,9 @@ export default function TodaysPlan() {
                         <button className="stp-act" title="Material" onClick={() => openMaterial(s)}>
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
                         </button>
+                        <button className="stp-act revise" title="Revise" onClick={() => openRevise(s)}>
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>
+                        </button>
                         <button className="stp-act danger" onClick={() => handleDelete(s.id)}>
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M10 11v6M14 11v6"/></svg>
                         </button>
@@ -846,6 +869,19 @@ export default function TodaysPlan() {
             setCurrentExamName(name);
             setShowAddExam(false);
           }}
+        />
+      )}
+
+      {/* SESSION REVISION MODAL */}
+      {reviseSession && (
+        <SessionRevisionModal
+          user={user}
+          examId={currentExamId}
+          planId={currentPlanId}
+          examName={currentExamName}
+          session={reviseSession}
+          onClose={() => setReviseSession(null)}
+          showToast={showToast}
         />
       )}
 
@@ -1061,7 +1097,7 @@ function fmtMin(m) { if (m < 60) return `${m}m`; const h = Math.floor(m/60), mm 
 /* ---------- Flex-mode ordered session list ---------- */
 function FlexSessionList({
   sessions, activeSession, timerSeconds, timerRunning, sessionStudied,
-  onStart, onPause, onEdit, onDelete, onMaterial, formatTime,
+  onStart, onPause, onEdit, onDelete, onMaterial, onRevise, formatTime,
 }) {
   // Pre-compute studied seconds + "any later started" flag for skip detection.
   const rows = [];
@@ -1151,6 +1187,9 @@ function FlexSessionList({
               </button>
               <button className="stp-act" title="Material" onClick={() => onMaterial?.(r.s)}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+              </button>
+              <button className="stp-act revise" title="Revise" onClick={() => onRevise?.(r.s)}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>
               </button>
               <button className="stp-act danger" title="Delete" onClick={() => onDelete(r.s.id)}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>
