@@ -17,10 +17,15 @@ if (!firebase.apps.length) {
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage(function(payload) {
-  const notificationTitle = payload.notification.title;
-  const notificationOptions = {
-    body: payload.notification.body,
-    icon: '/icon.png'
-  };
-  return self.registration.showNotification(notificationTitle, notificationOptions);
+  // Session reminders use data-only messages (no 'notification' field) to
+  // prevent Firebase from auto-displaying a second notification alongside this one.
+  const d = payload.data || {};
+  const n = payload.notification || {};
+  const title = d.title || n.title;
+  const body = d.body || n.body;
+  if (!title) return;
+  return self.registration.showNotification(title, {
+    body,
+    icon: '/icon.png',
+  });
 });
