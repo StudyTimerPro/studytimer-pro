@@ -13,7 +13,8 @@ export async function callAI(messages, model = "gpt-4o-mini", temperature = 0.7,
   if (uid) {
     try { await assertHasBalance(uid); }
     catch (e) {
-      useStore.getState().showToast?.(e.message || "Token limit reached");
+      if (e.code === "TOKEN_LIMIT") useStore.getState().showTokenExhaustedModal?.();
+      else useStore.getState().showToast?.(e.message || "Token limit reached");
       throw e;
     }
   }
@@ -47,7 +48,8 @@ export async function callAIStream(messages, model = "gpt-4o-mini", onChunk, onD
   if (uid) {
     try { await assertHasBalance(uid); }
     catch (e) {
-      useStore.getState().showToast?.(e.message || "Token limit reached");
+      if (e.code === "TOKEN_LIMIT") useStore.getState().showTokenExhaustedModal?.();
+      else useStore.getState().showToast?.(e.message || "Token limit reached");
       throw e;
     }
   }

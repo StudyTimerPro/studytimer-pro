@@ -84,6 +84,14 @@ const useStore = create((set) => ({
   notifications:    [],
   setNotifications: (notifications) => set({ notifications }),
 
+  // ── Token purchase modals ─────────────────
+  tokenExhaustedModal:     false,
+  showTokenExhaustedModal: () => set({ tokenExhaustedModal: true }),
+  hideTokenExhaustedModal: () => set({ tokenExhaustedModal: false }),
+  tokensModalOpen:         false,
+  openTokensModal:         () => set({ tokensModalOpen: true }),
+  closeTokensModal:        () => set({ tokensModalOpen: false }),
+
   // ── Current Group context (for Navbar bell) ─────────────────
   currentGroupId:         null,
   setCurrentGroupId:      (currentGroupId) => set({ currentGroupId }),

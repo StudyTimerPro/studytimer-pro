@@ -8,13 +8,14 @@ import WastageReport from "./pages/WastageReport";
 import InsightsReport from "./pages/InsightsReport";
 import Groups from "./pages/Groups";
 import Leaderboard from "./pages/Leaderboard";
+import TokenExhaustedModal from "./components/common/TokenExhaustedModal";
 import useStore from "./store/useStore";
 import { useAuth } from "./hooks/useAuth";
 import "./index.css";
 
 function AppInner() {
   const { user } = useAuth();
-  const { settings, settingsLoaded, setSettings, currentPlanMode } = useStore();
+  const { settings, settingsLoaded, setSettings, currentPlanMode, tokenExhaustedModal } = useStore();
 
   // Show first-time setup when: logged in, settings loaded, no setup done
   const showSetup = user && settingsLoaded && !settings?.firstTimeSetup;
@@ -26,6 +27,7 @@ function AppInner() {
       {showSetup && (
         <FirstTimeSetup user={user} onComplete={s => setSettings(s)} />
       )}
+      {tokenExhaustedModal && <TokenExhaustedModal />}
       <Routes>
         <Route path="/"            element={<TodaysPlan />} />
         <Route path="/live"        element={<LiveSession />} />

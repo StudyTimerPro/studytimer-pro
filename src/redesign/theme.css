@@ -1972,6 +1972,7 @@ body.stp-has-sidebar main{ padding-left: 268px; }
 .stp-token-pkg-grid{
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
 }
+.stp-token-pkg-grid--2col{ grid-template-columns: repeat(2, 1fr); }
 @media (max-width: 520px){ .stp-token-pkg-grid{ grid-template-columns: 1fr; } }
 .stp-token-pkg{
   border: 1px solid var(--border); border-radius: 12px;

@@ -21,11 +21,18 @@ export default function BurgerMenu({ user, onLogout, onSwitchAccount }) {
    * unnecessary re-renders. Use fine-grained selectors instead so the component
    * only re-renders when the specific slice it cares about changes.
    */
-  const exportSessions  = useStore(s => s.exportSessions);
-  const wastageHistory  = useStore(s => s.wastageHistory);
-  const darkMode        = useStore(s => s.darkMode);
-  const setDarkMode     = useStore(s => s.setDarkMode);
-  const streak          = useStore(s => s.streak);
+  const exportSessions   = useStore(s => s.exportSessions);
+  const wastageHistory   = useStore(s => s.wastageHistory);
+  const darkMode         = useStore(s => s.darkMode);
+  const setDarkMode      = useStore(s => s.setDarkMode);
+  const streak           = useStore(s => s.streak);
+  const tokensModalOpen  = useStore(s => s.tokensModalOpen);
+  const closeTokensModal = useStore(s => s.closeTokensModal);
+
+  // Open TokensModal when triggered from elsewhere (e.g. token-exhausted popup)
+  useEffect(() => {
+    if (tokensModalOpen) { setShowTokens(true); closeTokensModal(); }
+  }, [tokensModalOpen]);
 
   useEffect(() => {
     if (!open) return;

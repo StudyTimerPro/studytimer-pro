@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
-  getUserTokens, decrementUserTokens,
   saveExam, savePlanToExam, getExams, getPlans,
 } from "../../firebase/db";
+import { listenWallet, ensureWallet, DEFAULT_LIMIT } from "../../utils/tokenTracker";
 import {
   callAI, callAIStream, getLanguageReminder, getLanguageSample,
   parseStudyInfo, stage1AnalyzeExam, stage2ParseAnalysis,
@@ -35,12 +35,12 @@ export default function AIPlanModal({ user, onClose, onCreated }) {
   const examName   = (currentExamName || "").trim() || fallbackExamName;
   const examDate   = settings?.examDate || "";
 
-  const [tab, setTab]       = useState(0);
+  const [tab, setTab]       = useState(1);
   const [qaChat, setQaChat] = useState([]);
   const [planChat, setPlanChat] = useState([]);
   const [input, setInput]   = useState("");
   const [busy, setBusy]     = useState(false);
-  const [tokens, setTokens] = useState(null);
+  const [wallet, setWallet] = useState({ used: 0, limit: DEFAULT_LIMIT });
   const [splash, setSplash] = useState(false);
   const [stage, setStage]   = useState(null);
   const [waitingExamName, setWaitingExamName] = useState(false);
@@ -57,8 +57,13 @@ export default function AIPlanModal({ user, onClose, onCreated }) {
   const studyTime     = useRef(null);
   const endRef        = useRef(null);
 
-  // ── Initial data ──
-  useEffect(() => { getUserTokens(user.uid).then(setTokens); }, [user.uid]);
+  // ── Wallet listener ──
+  useEffect(() => {
+    if (!user?.uid) return;
+    ensureWallet(user.uid).catch(() => {});
+    const unsub = listenWallet(user.uid, setWallet);
+    return () => typeof unsub === "function" && unsub();
+  }, [user?.uid]);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [qaChat, planChat, tab, splash]);
 
   // ── Auto-start tabs ──
@@ -110,10 +115,6 @@ export default function AIPlanModal({ user, onClose, onCreated }) {
     appendPlan("assistant", "Please wait Setting things up… ⚡");
     const dleft = daysLeft(examDate);
     try {
-      // Live token check
-      const live = await getUserTokens(user.uid);
-      setTokens(live);
-
       const systemPrompt =
         `You are an AI study coach. Speak in ${language}+English mix with emojis. ` +
         getLanguageSample(language);
@@ -179,10 +180,6 @@ export default function AIPlanModal({ user, onClose, onCreated }) {
 
   // ── Q&A tab send ──
   async function sendQA(text) {
-    const live = await getUserTokens(user.uid);
-    setTokens(live);
-    if (live <= 0) { showToast("No AI tokens remaining"); return; }
-
     appendQA("user", text);
     qaHistory.current.push({ role: "user", content: text });
     setBusy(true);
@@ -273,10 +270,6 @@ export default function AIPlanModal({ user, onClose, onCreated }) {
     }
 
     // Free-form conversation with AI
-    const live = await getUserTokens(user.uid);
-    setTokens(live);
-    if (live <= 0) { showToast("No AI tokens remaining"); return; }
-
     planHistory.current.push({ role: "user", content: text });
     setBusy(true);
     let full = "";
@@ -354,9 +347,6 @@ export default function AIPlanModal({ user, onClose, onCreated }) {
       const firstNew = freshPlans[freshPlans.length - plansCreated];
       if (firstNew) { setCurrentPlanId(firstNew.id); setCurrentPlanName(firstNew.name); }
 
-      await decrementUserTokens(user.uid);
-      setTokens(t => Math.max(0, (t ?? 1) - 1));
-
       const summary = [`✅ Created ${plansCreated} plans with ${sessionsCreated} sessions under ${examName}\n`];
       for (const entry of Object.values(plans)) {
         const highCount = entry.sessions.filter(s => s[4] === "High").length;
@@ -372,14 +362,14 @@ export default function AIPlanModal({ user, onClose, onCreated }) {
     }
   }
 
-  const noTokens = tokens !== null && tokens <= 0;
+  const noTokens = (wallet.limit || DEFAULT_LIMIT) - (wallet.used || 0) <= 0;
   const msgs = tab === 0 ? qaChat : planChat;
 
   return (
     <div style={S.wrap}>
       <div style={S.header}>
         <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 700, fontSize: 16, color: "white", marginBottom: 10 }}>🤖 AI Study Coach</div>
+          <div style={{ fontWeight: 700, fontSize: 16, color: "white", marginBottom: 10 }}>🤖 AI Study Planner & Guider</div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {["💡 Ask Questions & Problem Solving", "📅 Study Plan Creation"].map((label, i) => (
               <button key={i} onClick={() => !busy && setTab(i)}
@@ -392,11 +382,6 @@ export default function AIPlanModal({ user, onClose, onCreated }) {
         <button onClick={onClose} style={S.closeBtn}>✕</button>
       </div>
 
-      {tokens !== null && (
-        <div style={{ ...S.tokenStrip, background: noTokens ? "#fde8e8" : "var(--bg)", color: noTokens ? "#c0392b" : "var(--ink2)" }}>
-          {noTokens ? "❌ No AI tokens remaining" : `🪙 ${tokens} AI generation${tokens !== 1 ? "s" : ""} remaining`}
-        </div>
-      )}
 
       <div style={S.msgs}>
         {msgs.map((m, i) => {
