@@ -212,7 +212,37 @@ Subject_2_Name (XX-YY% weightage)
   - Topic 2
   - Topic 3
 
+Subject_3_Name (XX-YY% weightage)
+  - Topic 1
+  - Topic 2
+
 [Continue for ALL major sub-areas...]
+
+EXAMPLE for "Electrical":
+Electrical Machines (25-30%)
+  - DC Machines
+  - Transformers basics
+  - Synchronous machines
+
+Transformers (20-25%)
+  - Single phase transformers
+  - Three phase transformers
+  - Auto transformers
+
+Induction Motors (15-20%)
+  - Working principle
+  - Equivalent circuit
+  - Starting methods
+
+Power Electronics (15-20%)
+  - Rectifiers
+  - Inverters
+  - Choppers
+
+Electromagnetics (10-15%)
+  - Maxwell equations
+  - Wave propagation
+  - Transmission lines
 
 BE COMPREHENSIVE: List ALL important sub-areas of "${specificTopics}" as SEPARATE SUBJECTS.
 Each subject will become a separate study plan with its own sessions.`;
@@ -231,7 +261,17 @@ Subject/Domain Name (XX-YY%)
   - Topic 1
   - Topic 2
   - Topic 3
+  - Topic 4
+  - Topic 5
   - [more topics if relevant]
+
+Example structure:
+Subject_Category_A (18-22%)
+  - Major_Topic_1
+  - Major_Topic_2
+  - Major_Topic_3
+  - Major_Topic_4
+  - Major_Topic_5
 
 Give me the complete comprehensive list for ${examName}.`;
   }
@@ -333,6 +373,78 @@ START WITH { END WITH }`;
     return fixSessionPriorities(result);
   } catch (err) {
     console.warn("[stage2] parse error:", err);
+    return null;
+  }
+}
+
+// ─── Stage 2 fallback: ask AI to directly emit ALL subjects + sessions ─────
+export async function stage2FallbackParse(examName, studyHours, studyTime) {
+  const startTimeStr = studyTime && studyTime.includes("-") ? studyTime.split("-")[0].trim() : "06:00";
+  const fallbackPrompt = `Create study plan JSON for ${examName} exam ONLY.
+
+EXAM: ${examName}
+STUDY TIME: Start from ${startTimeStr}, 10 min break between sessions
+
+RULES:
+1. ALL subjects for ${examName} only (no other exams)
+2. 3-7 sessions per subject, each 30-60 min
+3. NO mega-sessions. Each topic once only. Last session: "No Break"
+4. EVERY subject MUST have a MIX of High, Medium AND Low priority:
+   - 3 sessions: 1 High, 1 Medium, 1 Low
+   - 5 sessions: 2 High, 2 Medium, 1 Low
+   - NEVER assign all same priority!
+5. Create ALL sessions for complete coverage - do NOT limit to study hours
+
+OUTPUT JSON:
+{
+  "subjects": [
+    {
+      "name": "Subject Name",
+      "percentage": 20,
+      "sessions": [
+        ["Session Topic 1", "${startTimeStr}", "06:50", "06:50-07:00", "High"],
+        ["Session Topic 2", "07:00", "07:40", "07:40-07:50", "Medium"],
+        ["Session Topic 3", "07:50", "08:20", "No Break", "Low"]
+      ]
+    }
+  ]
+}
+
+START WITH { END WITH }`;
+
+  const sysContent = `Create complete study plan JSON for ${examName} ONLY. ALL subjects, 3-7 sessions each, 30-60 min. CRITICAL: Every subject MUST have a mix of High, Medium AND Low priorities - never all same. Create ALL sessions for full coverage. Return ONLY valid JSON.`;
+
+  let response = await callAI(
+    [
+      { role: "system", content: sysContent },
+      { role: "user", content: fallbackPrompt },
+    ],
+    "gpt-4o-mini",
+    0.2,
+    "ai_coach.stage2_fallback"
+  );
+
+  try {
+    response = response.trim();
+    if (response.includes("```json")) {
+      const start = response.indexOf("```json") + 7;
+      const end = response.indexOf("```", start);
+      response = response.slice(start, end).trim();
+    } else if (response.includes("```")) {
+      const start = response.indexOf("```") + 3;
+      const end = response.indexOf("```", start);
+      response = response.slice(start, end).trim();
+    }
+    if (response.includes("{")) {
+      const s = response.indexOf("{");
+      const e = response.lastIndexOf("}") + 1;
+      response = response.slice(s, e);
+    }
+    const result = JSON.parse(response);
+    if (!result.subjects) return null;
+    return fixSessionPriorities(result);
+  } catch (err) {
+    console.warn("[stage2-fallback] parse error:", err);
     return null;
   }
 }

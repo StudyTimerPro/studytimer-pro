@@ -748,6 +748,7 @@ button::-moz-focus-inner{ border: 0; }
   animation: stp-fade .3s ease;
 }
 @keyframes stp-fade{ from{ opacity:0; transform: translateY(6px); } to { opacity:1; transform:none; } }
+@keyframes stpSpin{ to { transform: rotate(360deg); } }
 
 /* ---------- Sidebar layout ---------- */
 /*

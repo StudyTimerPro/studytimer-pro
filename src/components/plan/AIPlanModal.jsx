@@ -5,12 +5,13 @@ import {
 import { listenWallet, ensureWallet, DEFAULT_LIMIT } from "../../utils/tokenTracker";
 import {
   callAI, callAIStream, getLanguageReminder, getLanguageSample,
-  parseStudyInfo, stage1AnalyzeExam, stage2ParseAnalysis,
+  parseStudyInfo, stage1AnalyzeExam, stage2ParseAnalysis, stage2FallbackParse,
   convertToPlansFormat, applyConstraints, addRevisionSessions,
   saveAIPlansToExam,
 } from "../../utils/aiService";
 import useStore from "../../store/useStore";
 import LoadingAnimation from "../common/LoadingAnimation";
+import TimePeriodPicker from "../common/TimePeriodPicker";
 
 // ── Small utilities ──────────────────────────────────────────────────────────
 const daysLeft = (examDate) => {
@@ -44,6 +45,7 @@ export default function AIPlanModal({ user, onClose, onCreated }) {
   const [splash, setSplash] = useState(false);
   const [stage, setStage]   = useState(null);
   const [waitingExamName, setWaitingExamName] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
 
   const planHistory   = useRef([]);
   const qaHistory     = useRef([]);
@@ -148,9 +150,9 @@ export default function AIPlanModal({ user, onClose, onCreated }) {
     planType.current = "overall";
     setSplash(false);
     const msg = msgT(language,
-      `👍 Overall plan for '${examName}'!\n\n⏰ How many hours? (eg: 4 hours 6am-10am)`,
-      `👍 '${examName}' ku overall plan!\n\n⏰ Evlo hours? (eg: 4 hours 6am-10am)`,
-      `👍 '${examName}' ke liye overall plan!\n\n⏰ Kitne hours? (eg: 4 hours 6am-10am)`
+      `👍 Overall plan for '${examName}'!\n\n⏰ How many hours? Tap the clock icon below or type (eg: 4 hours 6am-10am)`,
+      `👍 '${examName}' ku overall plan!\n\n⏰ Evlo hours? Below clock icon press pannu or type pannu (eg: 4 hours 6am-10am)`,
+      `👍 '${examName}' ke liye overall plan!\n\n⏰ Kitne hours? Niche clock icon dabao ya type karo (eg: 4 hours 6am-10am)`
     );
     appendPlan("assistant", msg);
     waitingHours.current = true;
@@ -319,7 +321,11 @@ export default function AIPlanModal({ user, onClose, onCreated }) {
         "📊 Stage 2: Complete structure create pandren...",
         "📊 Stage 2: Complete structure bana raha..."
       ));
-      const data = await stage2ParseAnalysis(analysis, studyHours.current, studyTime.current);
+      let data = await stage2ParseAnalysis(analysis, studyHours.current, studyTime.current);
+      if (!data) {
+        appendPlan("assistant", "🔄 Retrying with direct method...");
+        data = await stage2FallbackParse(examName, studyHours.current, studyTime.current);
+      }
       if (!data) { appendPlan("assistant", "⚠️ Could not create structure. Please try again."); setBusy(false); return; }
 
       let plans = convertToPlansFormat(data);
@@ -427,6 +433,15 @@ export default function AIPlanModal({ user, onClose, onCreated }) {
       </div>
 
       <div style={S.bar}>
+        {tab === 1 && (
+          <button
+            type="button"
+            onClick={() => !busy && !noTokens && setShowTimePicker(true)}
+            disabled={busy || noTokens}
+            title="Pick study time"
+            style={{ ...S.timeBtn, opacity: busy || noTokens ? 0.4 : 1 }}
+          >⏰</button>
+        )}
         <input
           value={input}
           onChange={e => setInput(e.target.value)}
@@ -438,6 +453,25 @@ export default function AIPlanModal({ user, onClose, onCreated }) {
         <button onClick={() => send()} disabled={busy || !input.trim() || noTokens}
           style={{ ...S.sendBtn, opacity: busy || !input.trim() || noTokens ? 0.4 : 1 }}>➤</button>
       </div>
+
+      {showTimePicker && (
+        <TimePeriodPicker
+          value={null}
+          onChange={({ timing, hours }) => {
+            const [a, b] = timing.split("-");
+            const fmt = t => {
+              const [h, m] = t.split(":").map(Number);
+              const hh12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+              const ap = h < 12 ? "am" : "pm";
+              return `${hh12}${m === 0 ? "" : ":" + String(m).padStart(2, "0")}${ap}`;
+            };
+            const text = `${hours} hours ${fmt(a)} to ${fmt(b)}`;
+            setInput(text);
+            setTimeout(() => send(text), 50);
+          }}
+          onClose={() => setShowTimePicker(false)}
+        />
+      )}
     </div>
   );
 }
@@ -453,7 +487,8 @@ const S = {
   bubbleUser: { background: "var(--accent)", color: "white", borderRadius: "18px 18px 4px 18px", border: "none" },
   bubbleAI:   { background: "var(--surface)", color: "var(--ink)", borderRadius: "18px 18px 18px 4px", border: "1px solid var(--border)" },
   qrBtn:      { padding: "9px 18px", borderRadius: 20, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, color: "white" },
-  bar:        { display: "flex", gap: 10, padding: "12px 16px", background: "var(--surface)", borderTop: "1px solid var(--border)", flexShrink: 0 },
+  bar:        { display: "flex", gap: 10, padding: "12px 16px", background: "var(--surface)", borderTop: "1px solid var(--border)", flexShrink: 0, alignItems: "center" },
+  timeBtn:    { background: "var(--bg)", color: "var(--ink)", border: "1.5px solid var(--border)", borderRadius: "50%", width: 42, height: 42, fontSize: 18, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   inp:        { flex: 1, padding: "10px 16px", borderRadius: 24, border: "1.5px solid var(--border)", fontSize: 14, background: "var(--bg)", color: "var(--ink)", fontFamily: "inherit", outline: "none" },
   sendBtn:    { background: "var(--accent)", color: "white", border: "none", borderRadius: "50%", width: 42, height: 42, fontSize: 16, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   splash:     { alignSelf: "center", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 18px", margin: "12px 0", boxShadow: "0 4px 12px rgba(0,0,0,.08)" },

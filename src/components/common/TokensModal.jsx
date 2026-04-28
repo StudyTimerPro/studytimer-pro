@@ -3,8 +3,11 @@ import { auth } from "../../firebase/config";
 import { listenWallet, ensureWallet, formatTokens, DEFAULT_LIMIT } from "../../utils/tokenTracker";
 
 const PACKAGES = [
-  { id: "starter", label: "Starter Pack",  tokens: 50_000,  paise: 1000, priceLabel: "₹10" },
-  { id: "pro",     label: "Pro Pack",       tokens: 300_000, paise: 5000, priceLabel: "₹50" },
+  { id: "starter",  label: "Starter Pack",  tokens: 50_000,     paise: 1000,   priceLabel: "₹10",   tagline: "Try it out" },
+  { id: "pro",      label: "Pro Pack",      tokens: 300_000,    paise: 5000,   priceLabel: "₹50",   tagline: "Light usage" },
+  { id: "basic",    label: "Basic Pack",    tokens: 1_000_000,  paise: 15000,  priceLabel: "₹150",  tagline: "10 Lakh tokens" },
+  { id: "standard", label: "Standard Pack", tokens: 5_500_000,  paise: 50000,  priceLabel: "₹500",  tagline: "55 Lakh tokens", popular: true },
+  { id: "premium",  label: "Premium Pack",  tokens: 11_000_000, paise: 100000, priceLabel: "₹1000", tagline: "1.1 Crore tokens", best: true },
 ];
 
 const CF_BASE = "https://asia-southeast1-leaderboard-98e8c.cloudfunctions.net";
@@ -103,7 +106,7 @@ export default function TokensModal({ user, onClose }) {
 
   return (
     <div className="stp-scrim" onClick={onClose}>
-      <div className="stp-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 480 }}>
+      <div className="stp-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 540 }}>
         <div className="stp-modal-head">
           <h3>AI Tokens</h3>
           <button className="stp-icon-btn" onClick={onClose} aria-label="Close">✕</button>
@@ -131,30 +134,76 @@ export default function TokensModal({ user, onClose }) {
             <div className="stp-token-meta">{pct}% used</div>
           </div>
 
-          <div className="stp-mat-section-title" style={{ marginTop: 18 }}>Top up</div>
+          <div className="stp-mat-section-title" style={{ marginTop: 18, marginBottom: 6 }}>Top up</div>
+          <div style={{ fontSize: 12, color: "var(--ink2)", marginBottom: 12 }}>
+            Pick a pack — tokens never expire and are added instantly after payment.
+          </div>
 
           {error   && <p style={{ color: "#B5453A", fontSize: 13, margin: "0 0 10px" }}>{error}</p>}
           {success && <p style={{ color: "#3A8C49", fontSize: 13, margin: "0 0 10px" }}>{success}</p>}
 
-          <div className="stp-token-pkg-grid stp-token-pkg-grid--2col">
-            {PACKAGES.map(p => (
-              <div key={p.id} className="stp-token-pkg">
-                <div className="name">{p.label}</div>
-                <div className="amt">{formatTokens(p.tokens)} tokens</div>
-                <div className="price">{p.priceLabel}</div>
-                <button
-                  className="stp-btn small"
-                  onClick={() => handleBuy(p)}
-                  disabled={!!paying}
-                  style={{ marginTop: 8, width: "100%" }}
+          <div style={pkgGrid}>
+            {PACKAGES.map(p => {
+              const accent = p.best ? "linear-gradient(135deg,#4E6B52,#3A8C49)"
+                            : p.popular ? "linear-gradient(135deg,#5A7E5F,#4E6B52)"
+                            : null;
+              return (
+                <div
+                  key={p.id}
+                  style={{
+                    ...pkgCard,
+                    border: p.best ? "2px solid var(--accent)" : "1px solid var(--border)",
+                    boxShadow: p.best ? "0 8px 24px rgba(78,107,82,0.18)" : "0 1px 2px rgba(0,0,0,0.04)",
+                  }}
                 >
-                  {paying === p.id ? "Processing…" : `Buy ${p.priceLabel}`}
-                </button>
-              </div>
-            ))}
+                  {p.best && <div style={badgeBest}>★ BEST VALUE</div>}
+                  {p.popular && !p.best && <div style={badgePopular}>POPULAR</div>}
+
+                  <div style={pkgHeader}>
+                    <div style={pkgName}>{p.label}</div>
+                    <div style={pkgTagline}>{p.tagline}</div>
+                  </div>
+
+                  <div style={pkgPriceRow}>
+                    <span style={pkgPrice}>{p.priceLabel}</span>
+                  </div>
+
+                  <div style={pkgTokens}>
+                    <div style={pkgTokenAmt}>{formatTokens(p.tokens)}</div>
+                    <div style={pkgTokenLbl}>tokens</div>
+                  </div>
+
+                  <button
+                    onClick={() => handleBuy(p)}
+                    disabled={!!paying}
+                    style={{
+                      ...pkgBtn,
+                      background: accent || "var(--accent)",
+                      opacity: paying ? 0.6 : 1,
+                    }}
+                  >
+                    {paying === p.id ? "Processing…" : `Buy ${p.priceLabel}`}
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
     </div>
   );
 }
+
+const pkgGrid     = { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 };
+const pkgCard     = { background: "var(--surface)", borderRadius: 14, padding: "14px 12px 12px", display: "flex", flexDirection: "column", position: "relative", transition: "transform 0.15s" };
+const badgeBest   = { position: "absolute", top: -10, left: "50%", transform: "translateX(-50%)", background: "var(--accent)", color: "white", fontSize: 10, fontWeight: 800, padding: "3px 10px", borderRadius: 12, letterSpacing: 0.5, whiteSpace: "nowrap" };
+const badgePopular= { position: "absolute", top: -8, right: 8, background: "var(--ink)", color: "white", fontSize: 9, fontWeight: 800, padding: "3px 8px", borderRadius: 10, letterSpacing: 0.5 };
+const pkgHeader   = { marginBottom: 10 };
+const pkgName     = { fontSize: 14, fontWeight: 700, color: "var(--ink)" };
+const pkgTagline  = { fontSize: 11, color: "var(--ink2)", marginTop: 2 };
+const pkgPriceRow = { display: "flex", alignItems: "baseline", gap: 4, marginBottom: 6 };
+const pkgPrice    = { fontSize: 22, fontWeight: 800, color: "var(--accent)", fontFamily: "Instrument Serif, serif", lineHeight: 1 };
+const pkgTokens   = { background: "var(--bg)", borderRadius: 8, padding: "8px 10px", marginBottom: 12, textAlign: "center" };
+const pkgTokenAmt = { fontSize: 16, fontWeight: 800, color: "var(--ink)", fontFamily: "JetBrains Mono, monospace" };
+const pkgTokenLbl = { fontSize: 10, color: "var(--ink2)", textTransform: "uppercase", letterSpacing: 0.5, marginTop: 1 };
+const pkgBtn      = { color: "white", border: "none", borderRadius: 10, padding: "9px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", marginTop: "auto" };
