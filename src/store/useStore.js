@@ -5,6 +5,12 @@ const useStore = create((set) => ({
   // ── Auth ──────────────────────────────────
   user: null,
   setUser: (user) => set({ user }),
+  isGuest: false,
+  setIsGuest: (isGuest) => set({ isGuest }),
+  guestSavePromptShown: false,
+  setGuestSavePromptShown: (guestSavePromptShown) => set({ guestSavePromptShown }),
+  guestSavePromptOpen: false,
+  setGuestSavePromptOpen: (guestSavePromptOpen) => set({ guestSavePromptOpen }),
 
   // ── Sessions / Plan ───────────────────────
   sessions: [],

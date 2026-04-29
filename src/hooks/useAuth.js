@@ -1,15 +1,57 @@
 import { useEffect } from "react";
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from "firebase/auth";
 import { auth } from "../firebase/config";
-import { saveUser, getUserSettings, getWastageAll } from "../firebase/db";
+import { saveUser, getUserSettings, getWastageAll, saveStudyProgress } from "../firebase/db";
 import useStore from "../store/useStore";
 
+const GUEST_UID = "__guest__";
+
+function migrateGuestProgressToUser(realUid) {
+  if (typeof window === "undefined") return;
+  const prefix = `stp:studyProgress:${GUEST_UID}:`;
+  const movedDates = [];
+  try {
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (!key || !key.startsWith(prefix)) continue;
+      const dateKey = key.slice(prefix.length);
+      const raw = window.localStorage.getItem(key);
+      if (!raw) continue;
+      try {
+        const parsed = JSON.parse(raw) || {};
+        if (Object.keys(parsed).length > 0) {
+          saveStudyProgress(realUid, dateKey, parsed);
+          movedDates.push(dateKey);
+        }
+      } catch {}
+    }
+    movedDates.forEach(d => {
+      try { window.localStorage.removeItem(`${prefix}${d}`); } catch {}
+    });
+  } catch {}
+}
+
 export function useAuth() {
-  const { user, setUser, showToast, setSettings, setSettingsLoaded, setDarkMode, setStreak, currentExamId, currentPlanId } = useStore();
+  const { user, setUser, showToast, setSettings, setSettingsLoaded, setDarkMode, setStreak, currentExamId, currentPlanId, setIsGuest, setGuestSavePromptShown } = useStore();
 
   useEffect(() => {
+    // Restore guest flag synchronously so the UI doesn't flash the welcome gate.
+    try {
+      if (localStorage.getItem("lp:isGuest") === "1") setIsGuest(true);
+      if (localStorage.getItem("lp:guestPromptShown") === "1") setGuestSavePromptShown(true);
+    } catch {}
+
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
+        // Guest → real user upgrade: migrate any locally-stored study progress.
+        try {
+          if (localStorage.getItem("lp:isGuest") === "1") {
+            migrateGuestProgressToUser(firebaseUser.uid);
+            localStorage.removeItem("lp:isGuest");
+            localStorage.removeItem("lp:guestPromptShown");
+          }
+        } catch {}
+        setIsGuest(false);
         setUser(firebaseUser);
         saveUser(firebaseUser.uid, {
           name:  firebaseUser.displayName,
@@ -64,6 +106,8 @@ export function useAuth() {
 
   return { user, login, logout };
 }
+
+export const GUEST_UID_PUBLIC = GUEST_UID;
 
 function calcStreak(wastage) {
   // wastage tree is now {examId: {planId: {date: {sessionId: {...}}}}}

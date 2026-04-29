@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import useStore from "../store/useStore";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth, GUEST_UID_PUBLIC } from "../hooks/useAuth";
 import { useTimer, setSessionTime } from "../hooks/useTimer";
 import {
   getExams, getPlans, listenPlanSessions,
@@ -35,6 +35,8 @@ function useIsMobile(bp = 768) {
 
 export default function TodaysPlan() {
   const { user } = useAuth();
+  const isGuest = useStore(s => s.isGuest);
+  const progressUid = user?.uid || (isGuest ? GUEST_UID_PUBLIC : null);
   const { startSession, pause, reset, timerRunning, timerSeconds, activeSession, formatTime } = useTimer();
   const {
     sessions, setSessions, showToast,
@@ -92,9 +94,9 @@ export default function TodaysPlan() {
   const todayKey = getTodayKey();
 
   useEffect(() => {
-    if (!user) return;
+    if (!progressUid) return;
     setStudiedLoaded(false);
-    getStudyProgress(user.uid, todayKey).then(saved => {
+    getStudyProgress(progressUid, todayKey).then(saved => {
       if (saved && Object.keys(saved).length > 0) {
         const normalizedSaved = Object.fromEntries(
           Object.entries(saved).map(([sessionId, secs]) => [sessionId, Number(secs) || 0])
@@ -114,19 +116,19 @@ export default function TodaysPlan() {
 
   // Debounced auto-save whenever sessionStudied changes
   useEffect(() => {
-    if (!user || Object.keys(sessionStudied).length === 0) return;
+    if (!progressUid || Object.keys(sessionStudied).length === 0) return;
     const t = setTimeout(() => {
-      saveStudyProgress(user.uid, todayKey, sessionStudied);
+      saveStudyProgress(progressUid, todayKey, sessionStudied);
     }, 2000); // 2-second debounce
     return () => clearTimeout(t);
-  }, [sessionStudied, user]); // eslint-disable-line
+  }, [sessionStudied, progressUid]); // eslint-disable-line
 
   // On page unload (refresh / tab close), synchronously write current progress
   // — including any live timerSeconds not yet flushed — to localStorage.
   // getStudyProgress merges localStorage + Firebase on next load, so this
   // ensures a mid-run refresh never loses the current session's elapsed time.
   useEffect(() => {
-    if (!user) return;
+    if (!progressUid) return;
     const handleUnload = () => {
       const state = useStore.getState();
       const toSave = { ...state.sessionStudied };
@@ -135,11 +137,11 @@ export default function TodaysPlan() {
           (toSave[state.activeSession.id] || 0) + state.timerSeconds;
       }
       if (Object.keys(toSave).length === 0) return;
-      saveStudyProgress(user.uid, todayKey, toSave);
+      saveStudyProgress(progressUid, todayKey, toSave);
     };
     window.addEventListener("beforeunload", handleUnload);
     return () => window.removeEventListener("beforeunload", handleUnload);
-  }, [user]); // eslint-disable-line
+  }, [progressUid]); // eslint-disable-line
 
   // ── Flex-mode ordered session list ─────────────────────────────────────────
   // In flex mode every session is created with start "00:00" so the default
@@ -421,14 +423,15 @@ export default function TodaysPlan() {
   }
 
   function defaultForm() {
-    return { name:"", subject:"", priority:"medium", material:"", start:"06:00", end:"06:30", breakMins:10, durationMins: 40 };
+    return { name:"", start:"06:00", end:"06:30", breakMins:10, durationMins: 40 };
   }
   function openAdd() { setForm(defaultForm()); setEditingId(null); setModalOpen(true); }
   function openEdit(s) {
     setForm({
-      name:s.name, subject:s.subject||"", priority:s.priority, material:s.material||"",
-      start:s.start || "06:00", end:s.end || "06:30",
-      breakMins:s.breakMins||0,
+      name: s.name,
+      start: s.start || "06:00",
+      end: s.end || "06:30",
+      breakMins: s.breakMins || 0,
       durationMins: s.durationMins || duration(s.start || "00:00", s.end || "00:40") || 40,
     });
     setEditingId(s.id); setModalOpen(true);
@@ -446,8 +449,8 @@ export default function TodaysPlan() {
       // Synthesize start/end so existing duration() / timer code keeps working.
       const synthEnd = `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
       data = {
-        name: form.name, subject: form.subject || "",
-        priority: form.priority, material: form.material || "",
+        name: form.name,
+        subject: "", priority: "medium", material: "",
         durationMins: mins,
         start: "00:00", end: synthEnd,
         breakMins: 0,
@@ -455,8 +458,13 @@ export default function TodaysPlan() {
       };
     } else {
       if (form.start >= form.end) { showToast("End time must be after start"); return; }
-      data = { ...form, createdAt: Date.now() };
-      delete data.durationMins;
+      data = {
+        name: form.name,
+        subject: "", priority: "medium", material: "",
+        start: form.start, end: form.end,
+        breakMins: form.breakMins,
+        createdAt: Date.now(),
+      };
     }
 
     if (editingId) { await updatePlanSession(user.uid, currentExamId, currentPlanId, editingId, data); showToast("Session updated ✓"); }
@@ -963,49 +971,29 @@ export default function TodaysPlan() {
               <Field label="Session name">
                 <input className="stp-input" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g. Calculus — limits" />
               </Field>
-              <Field label="Subject / exam">
-                <input className="stp-input" value={form.subject} onChange={e => setForm({ ...form, subject: e.target.value })} placeholder="e.g. Engineering Mathematics" />
-              </Field>
-              <div className="stp-row-2">
-                <Field label="Priority">
-                  <div className="stp-pri-group">
-                    {["high","medium","low"].map(p => (
-                      <button
-                        key={p}
-                        className={`stp-pri-btn ${p === "medium" ? "med" : p} ${form.priority === p ? "on" : ""}`}
-                        onClick={() => setForm({ ...form, priority: p })}>
-                        <span className="d" /> {p[0].toUpperCase() + p.slice(1)}
-                      </button>
-                    ))}
-                  </div>
+              {isFlex ? (
+                <Field label="Duration (minutes)">
+                  <input
+                    type="number" min="1" max="600" className="stp-input"
+                    value={form.durationMins}
+                    onChange={e => setForm({ ...form, durationMins: parseInt(e.target.value) || 0 })}
+                  />
                 </Field>
-                <Field label="Material">
-                  <input className="stp-input" value={form.material} onChange={e => setForm({ ...form, material: e.target.value })} placeholder="e.g. Chapter 3" />
-                </Field>
-                {isFlex ? (
-                  <Field label="Duration (minutes)">
-                    <input
-                      type="number" min="1" max="600" className="stp-input"
-                      value={form.durationMins}
-                      onChange={e => setForm({ ...form, durationMins: parseInt(e.target.value) || 0 })}
-                    />
-                  </Field>
-                ) : (
-                  <>
+              ) : (
+                <>
+                  <div className="stp-row-2">
                     <Field label="Start">
                       <input type="time" className="stp-input" value={form.start} onChange={e => setForm({ ...form, start: e.target.value })} />
                     </Field>
                     <Field label="End">
                       <input type="time" className="stp-input" value={form.end} onChange={e => setForm({ ...form, end: e.target.value })} />
                     </Field>
-                  </>
-                )}
-              </div>
-              {!isFlex && (
-                <Field label="Break after (minutes)">
-                  <input type="number" min="0" max="60" className="stp-input" value={form.breakMins}
-                         onChange={e => setForm({ ...form, breakMins: parseInt(e.target.value) || 0 })} />
-                </Field>
+                  </div>
+                  <Field label="Break after (minutes)">
+                    <input type="number" min="0" max="60" className="stp-input" value={form.breakMins}
+                           onChange={e => setForm({ ...form, breakMins: parseInt(e.target.value) || 0 })} />
+                  </Field>
+                </>
               )}
             </div>
 

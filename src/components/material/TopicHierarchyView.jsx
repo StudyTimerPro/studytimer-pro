@@ -122,6 +122,67 @@ export default function TopicHierarchyView({
     });
   }, [activeSubtopics, dayProgress, filter]);
 
+  // ── Cross-day grouping ────────────────────────────────────────────────────
+  // Every calendar date that has a study-day assigned, with its subtopics +
+  // current per-day status. Used by the expandable per-day filter dropdown so
+  // the All/Pending/Complete pills work across ALL days, not just today.
+  const allDayGroups = useMemo(() => {
+    if (!hierarchy?.topics) return [];
+    const subtopicsByDayNumber = {};
+    for (const t of hierarchy.topics) {
+      for (const st of (t.subtopics || [])) {
+        const dn = Number(st.day_number);
+        if (!dn) continue;
+        (subtopicsByDayNumber[dn] = subtopicsByDayNumber[dn] || []).push({
+          topic: t.topic, importance: t.importance, ...st,
+        });
+      }
+    }
+    const groups = Object.entries(dayMap || {})
+      .map(([dateKey, dayNum]) => {
+        const dn = Number(dayNum) || 0;
+        const subs = subtopicsByDayNumber[dn] || [];
+        const dayProg = progress[dateKey] || {};
+        const enriched = subs.map(st => ({
+          ...st,
+          _status: statusOf(dayProg[topicSlug(st.subtopic_name)]),
+        }));
+        const filtered = enriched.filter(st => {
+          if (filter === "complete") return st._status === "complete";
+          if (filter === "pending")  return st._status !== "complete";
+          return true;
+        });
+        const completeCount = enriched.filter(s => s._status === "complete").length;
+        const pendingCount  = enriched.length - completeCount;
+        return {
+          dateKey, dayNum: dn,
+          subtopics: filtered,
+          totalCount: enriched.length,
+          completeCount,
+          pendingCount,
+          shownCount: filter === "complete" ? completeCount : filter === "pending" ? pendingCount : enriched.length,
+        };
+      })
+      .filter(g => g.dayNum > 0)
+      .sort((a, b) => a.dayNum - b.dayNum);
+    return groups;
+  }, [hierarchy, dayMap, progress, filter]);
+
+  const allDayTotals = useMemo(() => {
+    let all = 0, complete = 0, pending = 0;
+    for (const g of allDayGroups) {
+      all += g.totalCount;
+      complete += g.completeCount;
+      pending += g.pendingCount;
+    }
+    return { all, complete, pending };
+  }, [allDayGroups]);
+
+  const [expandedDays, setExpandedDays] = useState({});
+  function toggleDay(dateKey) {
+    setExpandedDays(prev => ({ ...prev, [dateKey]: !prev[dateKey] }));
+  }
+
   async function generateHierarchy() {
     if (!session?.name) { showToast?.("Session has no topic name"); return; }
     setBusy(true);
@@ -163,11 +224,12 @@ export default function TopicHierarchyView({
     generateHierarchy();
   }
 
-  async function toggleStatus(subtopic) {
+  async function toggleStatus(subtopic, dateKey = selectedDay) {
     const slug = topicSlug(subtopic.subtopic_name);
-    const current = statusOf(dayProgress[slug]);
+    const dayProg = progress[dateKey] || {};
+    const current = statusOf(dayProg[slug]);
     const next = current === "complete" ? "pending" : "complete";
-    await saveTopicProgress(user.uid, examId, planId, session.id, selectedDay, slug, {
+    await saveTopicProgress(user.uid, examId, planId, session.id, dateKey, slug, {
       status: next,
       topic: subtopic.topic,
       subtopic_name: subtopic.subtopic_name,
@@ -233,6 +295,92 @@ export default function TopicHierarchyView({
 
   return (
     <>
+      {/* ── Cross-day filter (works across ALL days) ─────────────────────── */}
+      <div className="stp-mat-section">
+        <div className="lp-hier-cross">
+          <div className="lp-hier-cross-head">
+            <div className="lp-hier-cross-title">All days · Filter</div>
+            <div className="stp-mat-filter">
+              {["all", "pending", "complete"].map(f => {
+                const n = f === "all" ? allDayTotals.all : f === "pending" ? allDayTotals.pending : allDayTotals.complete;
+                return (
+                  <button key={f} className={`stp-pill${filter === f ? " on" : ""}`} onClick={() => setFilter(f)}>
+                    {f === "all" ? "All" : f === "pending" ? "Pending" : "Complete"} · {n}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {allDayGroups.length === 0 ? (
+            <div className="stp-mat-empty">Open dates over time to assign study days, then they'll appear here.</div>
+          ) : (
+            <div className="lp-hier-day-list">
+              {allDayGroups.map(g => {
+                const open = !!expandedDays[g.dateKey];
+                const isToday = g.dateKey === today;
+                return (
+                  <div key={g.dateKey} className={`lp-hier-day${open ? " open" : ""}`}>
+                    <button className="lp-hier-day-row" onClick={() => toggleDay(g.dateKey)}>
+                      <span className="lp-hier-day-caret" aria-hidden>{open ? "▾" : "▸"}</span>
+                      <span className="lp-hier-day-name">
+                        Day {g.dayNum}
+                        <span className="lp-hier-day-date">
+                          {isToday ? "Today" : g.dateKey}
+                        </span>
+                      </span>
+                      <span className="lp-hier-day-counts">
+                        <span className="lp-hier-cnt ok" title="Complete">{g.completeCount}</span>
+                        <span className="lp-hier-cnt pend" title="Pending">{g.pendingCount}</span>
+                        <span className="lp-hier-cnt total" title="Total">{g.totalCount}</span>
+                      </span>
+                    </button>
+                    {open && (
+                      <div className="lp-hier-day-body">
+                        {g.subtopics.length === 0 ? (
+                          <div className="lp-hier-day-empty">
+                            {filter === "complete" ? "Nothing complete yet." :
+                             filter === "pending"  ? "All clear — nothing pending." :
+                             "No subtopics for this day."}
+                          </div>
+                        ) : (
+                          g.subtopics.map((st, i) => {
+                            const isComplete = st._status === "complete";
+                            return (
+                              <div key={topicSlug(st.subtopic_name) + i} className={`lp-hier-sub ${isComplete ? "ok" : "muted"}`}>
+                                <div className="lp-hier-sub-head">
+                                  <span className="stp-topic-pri" data-pri={String(st.importance || "Medium").toLowerCase()}>
+                                    {st.importance || "Medium"}
+                                  </span>
+                                  <span className="lp-hier-sub-name">{st.subtopic_name}</span>
+                                </div>
+                                <div className="lp-hier-sub-parent">{st.topic}</div>
+                                <div className="lp-hier-sub-actions">
+                                  <button
+                                    className={`stp-toggle-btn${isComplete ? " on" : ""}`}
+                                    onClick={() => toggleStatus(st, g.dateKey)}
+                                    role="switch"
+                                    aria-checked={isComplete}
+                                    title={isComplete ? "Mark pending" : "Mark complete"}
+                                  >
+                                    <span className="track"><span className="thumb" /></span>
+                                    <span className="lbl">{isComplete ? "Complete" : "Pending"}</span>
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
       <div className="stp-mat-section">
         <div className="stp-mat-bar">
           <div className="stp-mat-day-pick">
@@ -244,13 +392,6 @@ export default function TopicHierarchyView({
                 return <option key={d} value={d}>{label} ({d})</option>;
               })}
             </select>
-          </div>
-          <div className="stp-mat-filter">
-            {["all", "pending", "complete"].map(f => (
-              <button key={f} className={`stp-pill${filter === f ? " on" : ""}`} onClick={() => setFilter(f)}>
-                {f === "all" ? "All" : f === "pending" ? "Pending" : "Complete"}
-              </button>
-            ))}
           </div>
           <button className="stp-btn small" onClick={regenerate} disabled={busy}>
             {busy ? "…" : "Regenerate"}

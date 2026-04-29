@@ -10,11 +10,16 @@ export default function GroupChat({ group, user, messages }) {
   const [pinnedMsg,    setPinnedMsg]    = useState(null);
   const bottomRef  = useRef(null);
   const textareaRef = useRef(null);
+  const scrollerRef = useRef(null);
 
   const isAdmin = group.createdBy === user.uid || group.members?.[user.uid]?.role === "admin";
 
+  // Scroll only the chat container — never bubble to ancestors. Using
+  // scrollIntoView() here (even with behavior:"smooth") would walk up the DOM
+  // and scroll <main>/<body>, pushing the navbar + group header off-screen.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = scrollerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [messages]);
 
   useEffect(() => {
@@ -112,7 +117,7 @@ export default function GroupChat({ group, user, messages }) {
         </div>
       )}
 
-      <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+      <div ref={scrollerRef} style={{ flex: 1, overflowY: "auto", overscrollBehavior: "contain", padding: "14px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
         {messages.length === 0 && (
           <div style={{ textAlign: "center", color: "var(--ink2)", padding: "40px 20px", fontSize: 14 }}>
             No messages yet. Say hello! 👋

@@ -70,8 +70,10 @@ export default function Navbar() {
         <div className="stp-top-row1">
           <div className="stp-brand">
             <BurgerMenu user={user} onLogout={logout} onSwitchAccount={handleSwitchAccount} />
-            <div className="stp-logo">S</div>
-            <div className="stp-brand-name">Studytimer <em>pro</em></div>
+            <div className="stp-logo lp-logo-img">
+              <img src="/logo.jpeg" alt="Lighthouse Prep" />
+            </div>
+            <div className="stp-brand-name">Lighthouse <em>Prep</em></div>
           </div>
 
           <div className="stp-top-right">

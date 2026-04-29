@@ -136,6 +136,13 @@ export function useTimer() {
     const state = useStore.getState();
     const current = state.activeSession;
 
+    // Guest first-start prompt: show "Save your progress?" once per guest.
+    if (state.isGuest && !state.guestSavePromptShown) {
+      state.setGuestSavePromptShown(true);
+      state.setGuestSavePromptOpen(true);
+      try { localStorage.setItem("lp:guestPromptShown", "1"); } catch {}
+    }
+
     // Reject if the target session is already fully studied.
     const targetDur = getSessionDurationSeconds(session);
     const targetStored = normalizeSeconds(state.sessionStudied?.[session.id]);

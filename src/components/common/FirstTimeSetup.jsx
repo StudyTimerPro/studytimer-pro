@@ -155,7 +155,7 @@ export default function FirstTimeSetup({ user, onComplete }) {
         {step === 1 && (
           <div style={{ textAlign: "center" }}>
             <div style={{ fontSize: 64, marginBottom: 16 }}>📚</div>
-            <h2 style={{ fontSize: 24, fontWeight: 700, color: "var(--ink)", marginBottom: 10 }}>Welcome to StudyTimer Pro</h2>
+            <h2 style={{ fontSize: 24, fontWeight: 700, color: "var(--ink)", marginBottom: 10 }}>Welcome to Lighthouse Prep</h2>
             <p style={{ fontSize: 15, color: "var(--ink2)", marginBottom: 32, lineHeight: 1.6 }}>
               Let's set up your study profile in just a minute.<br />It helps us personalize your experience.
             </p>

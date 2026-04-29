@@ -24,7 +24,7 @@ const sections = [
   {
     icon: "🏆",
     title: "Leaderboard",
-    body: "See how you stack up against other StudyTimer Pro users based on weekly study hours.",
+    body: "See how you stack up against other Lighthouse Prep users based on weekly study hours.",
   },
   {
     icon: "📄",
@@ -41,7 +41,7 @@ export default function HelpModal({ onClose }) {
     >
       <div style={{ background: "var(--surface)", borderRadius: 16, padding: "32px 28px", width: "min(460px,100%)", boxShadow: "0 24px 64px rgba(0,0,0,.3)", maxHeight: "90vh", overflowY: "auto" }}>
         <h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--ink)", marginBottom: 6 }}>❓ Help & Guide</h2>
-        <p style={{ fontSize: 13, color: "var(--ink2)", marginBottom: 24 }}>Everything you need to know about StudyTimer Pro.</p>
+        <p style={{ fontSize: 13, color: "var(--ink2)", marginBottom: 24 }}>Everything you need to know about Lighthouse Prep.</p>
 
         {sections.map(s => (
           <div key={s.title} style={{ marginBottom: 20, padding: "14px 16px", background: "var(--bg)", borderRadius: 10 }}>

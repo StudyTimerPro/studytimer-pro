@@ -68,7 +68,7 @@ export default function TokensModal({ user, onClose }) {
           amount: order.amount,
           currency: order.currency,
           order_id: order.order_id,
-          name: "StudyTimer Pro",
+          name: "Lighthouse Prep",
           description: `${formatTokens(pkg.tokens)} AI Tokens`,
           image: "/icon.png",
           prefill: { name: user.displayName || "", email: user.email || "" },
